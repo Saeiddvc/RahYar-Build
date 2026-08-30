@@ -1,0 +1,216 @@
+diff -ruN '--exclude=*.ttf' a/RUN40_SOURCE_INFO.txt b/RUN40_SOURCE_INFO.txt
+--- a/RUN40_SOURCE_INFO.txt	1970-01-01 00:00:00.000000000 +0000
++++ b/RUN40_SOURCE_INFO.txt	2026-08-30 15:11:19.486714519 +0000
+@@ -0,0 +1,7 @@
++RahYar Run 40
++Version: 1.5.6-prd-regression-fix
++VersionCode: 18
++Baseline: Run 39 / 1.5.5-field-test
++Regression contract: ItineraryStop, Poi, QuickSettings, PersonalPlace, RouteType LOW_TRAFFIC validity, CameraPadding.
++UI restoration: Home personal places + service shortcuts, navigation mid-route services entry, expanded Quick Settings.
++Fonts: embedded Persian IRANSans family resources recovered from verified Run38 APK baseline; no CI fallback substitution.
+diff -ruN '--exclude=*.ttf' a/app/build.gradle.kts b/app/build.gradle.kts
+--- a/app/build.gradle.kts	2026-08-30 08:55:54.000000000 +0000
++++ b/app/build.gradle.kts	2026-08-30 15:10:00.048316105 +0000
+@@ -16,8 +16,8 @@
+         applicationId = "ir.rahyar.app"
+         minSdk = 24
+         targetSdk = 34
+-        versionCode = 17
+-        versionName = "1.5.5-field-test"
++        versionCode = 18
++        versionName = "1.5.6-prd-regression-fix"
+         buildConfigField("String", "ORS_API_KEY", "\"${orsApiKey.escapeBuildConfig()}\"")
+         buildConfigField("String", "HERE_API_KEY", "\"${hereApiKey.escapeBuildConfig()}\"")
+     }
+diff -ruN '--exclude=*.ttf' a/app/src/main/java/ir/rahyar/app/domain/models/Itinerary.kt b/app/src/main/java/ir/rahyar/app/domain/models/Itinerary.kt
+--- a/app/src/main/java/ir/rahyar/app/domain/models/Itinerary.kt	2026-08-30 08:56:54.000000000 +0000
++++ b/app/src/main/java/ir/rahyar/app/domain/models/Itinerary.kt	2026-08-30 15:10:00.048541714 +0000
+@@ -1,17 +1,16 @@
+ package ir.rahyar.app.domain.models
+ 
+ data class Itinerary(
+-    val origin: LatLng,
++    val origin: GeoPoint,
+     val stops: List<ItineraryStop>,
+-    val destination: LatLng
++    val destination: GeoPoint
+ )
+ 
+ data class ItineraryStop(
+     val id: String,
+-    val point: LatLng,
+-    val title: String? = null,
++    val location: GeoPoint,
+     val order: Int,
+-    val status: StopStatus = StopStatus.PENDING
++    val status: StopStatus
+ )
+ 
+ enum class StopStatus {
+diff -ruN '--exclude=*.ttf' a/app/src/main/java/ir/rahyar/app/domain/models/NavigationContracts.kt b/app/src/main/java/ir/rahyar/app/domain/models/NavigationContracts.kt
+--- a/app/src/main/java/ir/rahyar/app/domain/models/NavigationContracts.kt	1970-01-01 00:00:00.000000000 +0000
++++ b/app/src/main/java/ir/rahyar/app/domain/models/NavigationContracts.kt	2026-08-30 15:10:00.048619499 +0000
+@@ -0,0 +1,50 @@
++package ir.rahyar.app.domain.models
++
++data class Poi(
++    val id: String,
++    val type: PoiType,
++    val name: String,
++    val location: GeoPoint,
++    val distanceFromRouteMeters: Int,
++    val detourDistanceMeters: Int,
++    val detourDurationMinutes: Int,
++    val isAheadOfUser: Boolean,
++    val isOpenNow: Boolean?,
++    val reliability: PoiReliability?
++)
++
++enum class PoiType {
++    GAS_STATION, REST_AREA, TOILET, PARKING, FOOD, CAFE,
++    HOSPITAL, EMERGENCY, SIGHTSEEING, USER_SAVED
++}
++
++enum class PoiReliability { VERIFIED, HIGH, MEDIUM, LOW, UNKNOWN }
++
++enum class MapViewMode { NORTH_UP, HEADING_UP, THREE_D }
++
++data class QuickSettings(
++    val voiceGuidanceEnabled: Boolean,
++    val voiceAlertsEnabled: Boolean,
++    val mapViewMode: MapViewMode,
++    val showTraffic: Boolean,
++    val avoidTrafficZone: Boolean,
++    val avoidPollutionZone: Boolean,
++    val avoidTollRoads: Boolean,
++    val rerouteOnHeavyTraffic: Boolean,
++    val rerouteOnSevereWeather: Boolean,
++    val speedLimitAlertsEnabled: Boolean
++)
++
++data class PersonalPlace(
++    val id: String,
++    val name: String,
++    val location: GeoPoint,
++    val iconRes: Int
++)
++
++data class CameraPadding(
++    val top: Int,
++    val bottom: Int,
++    val start: Int,
++    val end: Int
++)
+diff -ruN '--exclude=*.ttf' a/app/src/main/java/ir/rahyar/app/domain/models/Route.kt b/app/src/main/java/ir/rahyar/app/domain/models/Route.kt
+--- a/app/src/main/java/ir/rahyar/app/domain/models/Route.kt	2026-08-30 08:36:26.000000000 +0000
++++ b/app/src/main/java/ir/rahyar/app/domain/models/Route.kt	2026-08-30 15:10:00.048480741 +0000
+@@ -10,6 +10,9 @@
+     val lng: Double get() = longitude
+ }
+ 
++// Canonical semantic name used by itinerary/POI contracts.
++typealias GeoPoint = LatLng
++
+ enum class TransportMode {
+     CAR,
+     MOTORCYCLE,
+@@ -21,8 +24,8 @@
+ 
+ enum class RouteType {
+     RECOMMENDED,
+-    LOW_TRAFFIC,
+     FASTEST,
++    LOW_TRAFFIC,   // only when HERE Traffic data is valid
+     ALTERNATIVE
+ }
+ 
+diff -ruN '--exclude=*.ttf' a/app/src/main/java/ir/rahyar/app/ui/components/NavigationControls.kt b/app/src/main/java/ir/rahyar/app/ui/components/NavigationControls.kt
+--- a/app/src/main/java/ir/rahyar/app/ui/components/NavigationControls.kt	2026-08-30 08:36:26.000000000 +0000
++++ b/app/src/main/java/ir/rahyar/app/ui/components/NavigationControls.kt	2026-08-30 15:10:00.048767514 +0000
+@@ -6,6 +6,7 @@
+ import androidx.compose.material.icons.filled.Close
+ import androidx.compose.material.icons.filled.Route
+ import androidx.compose.material.icons.filled.Settings
++import androidx.compose.material.icons.filled.LocalGasStation
+ import androidx.compose.material.icons.filled.VolumeOff
+ import androidx.compose.material.icons.filled.VolumeUp
+ import androidx.compose.material3.*
+@@ -21,6 +22,7 @@
+     alternativesEnabled: Boolean,
+     onEnd: () -> Unit,
+     onSettings: () -> Unit,
++    onServices: () -> Unit,
+     onAlternatives: () -> Unit,
+     onVoiceToggle: () -> Unit
+ ) {
+@@ -45,6 +47,9 @@
+             ControlButton("تنظیمات", true, onSettings) {
+                 Icon(Icons.Default.Settings, "تنظیمات مسیر")
+             }
++            ControlButton("خدمات", true, onServices) {
++                Icon(Icons.Default.LocalGasStation, "خدمات میان‌راه")
++            }
+             ControlButton("مسیرها", alternativesEnabled, onAlternatives) {
+                 Icon(
+                     Icons.Default.Route,
+diff -ruN '--exclude=*.ttf' a/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt b/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+--- a/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt	2026-08-30 08:36:26.000000000 +0000
++++ b/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt	2026-08-30 15:10:23.897093317 +0000
+@@ -130,6 +130,16 @@
+ 
+     var navigationStartFailed by remember { mutableStateOf(false) }
+     var showQuickSettings by remember { mutableStateOf(false) }
++    var showMidRouteServices by remember { mutableStateOf(false) }
++    var voiceAlertsEnabled by remember { mutableStateOf(true) }
++    var showTraffic by remember { mutableStateOf(false) }
++    var avoidTrafficZone by remember { mutableStateOf(false) }
++    var avoidPollutionZone by remember { mutableStateOf(false) }
++    var avoidTollRoads by remember { mutableStateOf(false) }
++    var rerouteHeavyTraffic by remember { mutableStateOf(false) }
++    var rerouteSevereWeather by remember { mutableStateOf(false) }
++    var speedLimitAlerts by remember { mutableStateOf(true) }
++    var mapViewMode by remember { mutableStateOf("HEADING_UP") }
+     var showEndConfirm by remember { mutableStateOf(false) }
+     var showTripStory by remember { mutableStateOf(false) }
+     var tripEndedAtMillis by remember { mutableLongStateOf(0L) }
+@@ -390,6 +400,7 @@
+             alternativesEnabled = false,
+             onEnd = { showEndConfirm = true },
+             onSettings = { showQuickSettings = true },
++            onServices = { showMidRouteServices = true },
+             onAlternatives = {},
+             onVoiceToggle = {
+                 scope.launch {
+@@ -400,43 +411,48 @@
+     }
+ 
+     if (showQuickSettings) {
+-        ModalBottomSheet(
+-            onDismissRequest = { showQuickSettings = false }
+-        ) {
+-            Column(
+-                Modifier
+-                    .fillMaxWidth()
+-                    .padding(20.dp)
+-            ) {
+-                Text(
+-                    "تنظیمات سریع",
+-                    style = MaterialTheme.typography.titleLarge
+-                )
++        ModalBottomSheet(onDismissRequest = { showQuickSettings = false }) {
++            Column(Modifier.fillMaxWidth().padding(20.dp)) {
++                Text("تنظیمات سریع مسیریابی", style = MaterialTheme.typography.titleLarge)
++                Spacer(Modifier.height(10.dp))
++                QuickToggle("راهنمای صوتی", voiceAvailable && voiceEnabled, voiceAvailable) { enabled ->
++                    scope.launch { settingsRepository.setVoiceGuidance(enabled) }
++                }
++                QuickToggle("هشدارهای صوتی", voiceAlertsEnabled) { voiceAlertsEnabled = it }
++                Text("نمای نقشه", style = MaterialTheme.typography.titleMedium)
++                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
++                    listOf("NORTH_UP" to "شمال بالا", "HEADING_UP" to "جهت حرکت", "THREE_D" to "سه‌بعدی").forEach { (key, label) ->
++                        FilterChip(selected = mapViewMode == key, onClick = { mapViewMode = key }, label = { Text(label) })
++                    }
++                }
++                QuickToggle("نمایش ترافیک", showTraffic) { showTraffic = it }
++                QuickToggle("پرهیز از محدوده پرترافیک", avoidTraf
