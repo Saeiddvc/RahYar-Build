@@ -1,0 +1,134 @@
+ficZone) { avoidTrafficZone = it }
++                QuickToggle("پرهیز از محدوده آلودگی", avoidPollutionZone) { avoidPollutionZone = it }
++                QuickToggle("پرهیز از عوارضی", avoidTollRoads) { avoidTollRoads = it }
++                QuickToggle("بازمسیر‌یابی در ترافیک سنگین", rerouteHeavyTraffic) { rerouteHeavyTraffic = it }
++                QuickToggle("بازمسیر‌یابی در آب‌وهوای شدید", rerouteSevereWeather) { rerouteSevereWeather = it }
++                QuickToggle("هشدار محدودیت سرعت", speedLimitAlerts) { speedLimitAlerts = it }
++                if (!voiceAvailable) Text("صدای فارسی سازگار روی دستگاه در دسترس نیست", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                 Spacer(Modifier.height(12.dp))
+-                Text(
+-                    "راهنمای صوتی",
+-                    style = MaterialTheme.typography.titleMedium
+-                )
+-
+-                Text(
+-                    if (voiceAvailable) {
+-                        "راهنمای صوتی دستگاه آماده است"
+-                    } else {
+-                        "صدای فارسی سازگار روی دستگاه در دسترس نیست"
+-                    },
+-                    style = MaterialTheme.typography.bodyMedium,
+-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+-                )
++            }
++        }
++    }
+ 
+-                Switch(
+-                    checked = voiceAvailable && voiceEnabled,
+-                    enabled = voiceAvailable,
+-                    onCheckedChange = { enabled ->
+-                        scope.launch {
+-                            settingsRepository.setVoiceGuidance(enabled)
++    if (showMidRouteServices) {
++        ModalBottomSheet(onDismissRequest = { showMidRouteServices = false }) {
++            Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(20.dp)) {
++                Text("خدمات میان‌راه", style = MaterialTheme.typography.titleLarge)
++                Text("پیشنهادها فقط در امتداد مسیر و با حفظ مقصد نهایی اضافه می‌شوند.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
++                Spacer(Modifier.height(12.dp))
++                listOf("پمپ بنزین", "استراحتگاه", "سرویس بهداشتی", "پارکینگ", "رستوران", "کافه", "بیمارستان", "اورژانس", "گردشگری").chunked(3).forEach { row ->
++                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                        row.forEach { label ->
++                            OutlinedButton(onClick = { }, modifier = Modifier.weight(1f)) { Text(label) }
+                         }
+                     }
+-                )
++                }
++                Spacer(Modifier.height(8.dp))
++                Text("در این Build، دسته‌بندی و نقطه ورود خدمات فعال است؛ نتیجه قطعی فقط پس از دریافت POI معتبر و محاسبه detour نمایش داده می‌شود.", style = MaterialTheme.typography.bodySmall)
+             }
+         }
+     }
+@@ -636,6 +652,19 @@
+     }
+ }
+ 
++@Composable
++private fun QuickToggle(
++    label: String,
++    checked: Boolean,
++    enabled: Boolean = true,
++    onCheckedChange: (Boolean) -> Unit
++) {
++    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
++        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
++        Switch(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange)
++    }
++}
++
+ private fun distanceForSpeech(distanceMeters: Double): String {
+     return if (distanceMeters < 1000.0) {
+         "${distanceMeters.roundToInt()} متر دیگر"
+diff -ruN '--exclude=*.ttf' a/app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt b/app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
+--- a/app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt	2026-08-30 08:36:26.000000000 +0000
++++ b/app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt	2026-08-30 15:10:40.953380365 +0000
+@@ -10,6 +10,13 @@
+ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.filled.Search
++import androidx.compose.material.icons.filled.Home
++import androidx.compose.material.icons.filled.Work
++import androidx.compose.material.icons.filled.Bookmark
++import androidx.compose.material.icons.filled.LocalGasStation
++import androidx.compose.material.icons.filled.Restaurant
++import androidx.compose.material.icons.filled.LocalParking
++import androidx.compose.material.icons.filled.LocalHospital
+ import androidx.compose.material3.*
+ import androidx.compose.runtime.*
+ import androidx.compose.ui.Alignment
+@@ -101,6 +108,25 @@
+                     Text("کجا می‌خواهید بروید؟", style = MaterialTheme.typography.bodyLarge)
+                 }
+             }
++            Spacer(Modifier.height(10.dp))
++            Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)) {
++                Column(Modifier.fillMaxWidth().padding(12.dp)) {
++                    Text("مکان‌های شخصی", style = MaterialTheme.typography.titleSmall)
++                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                        HomeShortcut("خانه", Icons.Default.Home, Modifier.weight(1f)) { navController.navigate(Destinations.DESTINATION_SEARCH) }
++                        HomeShortcut("محل کار", Icons.Default.Work, Modifier.weight(1f)) { navController.navigate(Destinations.DESTINATION_SEARCH) }
++                        HomeShortcut("ذخیره‌شده", Icons.Default.Bookmark, Modifier.weight(1f)) { navController.navigate(Destinations.DESTINATION_SEARCH) }
++                    }
++                    Spacer(Modifier.height(8.dp))
++                    Text("خدمات نزدیک و میان‌راه", style = MaterialTheme.typography.titleSmall)
++                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
++                        HomeShortcut("سوخت", Icons.Default.LocalGasStation, Modifier.weight(1f)) { navController.navigate(Destinations.DESTINATION_SEARCH) }
++                        HomeShortcut("غذا", Icons.Default.Restaurant, Modifier.weight(1f)) { navController.navigate(Destinations.DESTINATION_SEARCH) }
++                        HomeShortcut("پارکینگ", Icons.Default.LocalParking, Modifier.weight(1f)) { navController.navigate(Destinations.DESTINATION_SEARCH) }
++                        HomeShortcut("بیمارستان", Icons.Default.LocalHospital, Modifier.weight(1f)) { navController.navigate(Destinations.DESTINATION_SEARCH) }
++                    }
++                }
++            }
+             Spacer(Modifier.height(8.dp))
+             Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp))
+         }
+@@ -108,3 +134,19 @@
+         FloatingActionButton(onClick = { navController.navigate(Destinations.SETTINGS) }, modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp)) { Text("تنظیم") }
+     }
+ }
++
++
++@Composable
++private fun HomeShortcut(
++    label: String,
++    icon: androidx.compose.ui.graphics.vector.ImageVector,
++    modifier: Modifier = Modifier,
++    onClick: () -> Unit
++) {
++    OutlinedButton(onClick = onClick, modifier = modifier, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)) {
++        Column(horizontalAlignment = Alignment.CenterHorizontally) {
++            Icon(icon, contentDescription = label, modifier = Modifier.size(20.dp))
++            Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
++        }
++    }
++}
