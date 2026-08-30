@@ -1,0 +1,139 @@
+ه", style = MaterialTheme.typography.bodySmall)
++                            Button(
++                                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
++                                onClick = {
++                                    scope.launch {
++                                        val current = active?.currentLocation ?: session.origin ?: return@launch
++                                        navigationSession.addStop(poi.location, poi.id)
++                                        val refreshed = navigationSession.state.value
++                                        val newRoute = routeRepository.getRoutes(current, destination, refreshed.transportMode, refreshed.waypoints)
++                                            .filter { it.distanceKm > 0.0 && it.durationMinutes > 0 }
++                                            .minByOrNull { it.durationMinutes }
++                                        if (newRoute != null) {
++                                            navigationSession.selectRoute(newRoute)
++                                            engine.startNavigation(newRoute, destination)
++                                            showMidRouteServices = false
++                                        } else poiError = "افزودن توقف به مسیر انجام نشد"
++                                    }
++                                }
++                            ) { Text("افزودن به عنوان توقف") }
+                         }
+                     }
+                 }
+-                Spacer(Modifier.height(8.dp))
+-                Text("در این Build، دسته‌بندی و نقطه ورود خدمات فعال است؛ نتیجه قطعی فقط پس از دریافت POI معتبر و محاسبه detour نمایش داده می‌شود.", style = MaterialTheme.typography.bodySmall)
++                Spacer(Modifier.height(12.dp))
+             }
+         }
+     }
+@@ -470,6 +554,7 @@
+                         showEndConfirm = false
+                         endedSnapshot = active
+                         tripEndedAtMillis = System.currentTimeMillis()
++                        navigationSession.endTrip()
+                         engine.stopNavigation()
+                         voiceManager.stop()
+                         showTripStory = true
+@@ -489,9 +574,11 @@
+     }
+ 
+     if (showTripStory) {
++        val trace = session.tripTrace.points
+         TripStorySheet(
+             route = initialRoute,
+-            startTimeMillis = tripStartedAtMillis,
++            trace = trace,
++            startTimeMillis = session.tripStartedAtMillis ?: tripStartedAtMillis,
+             endTimeMillis = tripEndedAtMillis.takeIf { it > 0L }
+                 ?: System.currentTimeMillis(),
+             averageSpeedKmh = if (speedSampleCount > 0) {
+@@ -538,6 +625,7 @@
+ @Composable
+ private fun TripStorySheet(
+     route: Route,
++    trace: List<ir.rahyar.app.navigation.TracePoint>,
+     startTimeMillis: Long,
+     endTimeMillis: Long,
+     averageSpeedKmh: Double,
+@@ -550,10 +638,15 @@
+ ) {
+     var rating by remember { mutableStateOf<Int?>(null) }
+ 
+-    val elapsedMinutes = (
+-        (endTimeMillis - startTimeMillis)
+-            .coerceAtLeast(0L) / 60_000L
+-        ).toInt()
++    val hasActualTrace = trace.size >= 2
++    val elapsedMinutes = if (hasActualTrace) {
++        ((trace.last().timestampMillis - trace.first().timestampMillis).coerceAtLeast(0L) / 60_000L).toInt()
++    } else 0
++    val actualDistanceKm = if (hasActualTrace) {
++        trace.zipWithNext().sumOf { (a, b) -> geoDistanceMeters(a.location, b.location) } / 1000.0
++    } else 0.0
++    val actualAverageSpeed = if (hasActualTrace) trace.map { it.speedKmh }.average() else 0.0
++    val actualMaxSpeed = if (hasActualTrace) trace.maxOf { it.speedKmh } else 0.0
+ 
+     ModalBottomSheet(
+         onDismissRequest = {}
+@@ -570,22 +663,18 @@
+             )
+             Spacer(Modifier.height(8.dp))
+ 
+-            Text(
+-                "مسافت برنامه‌ریزی‌شده: ${faDistance(route.distanceKm)} کیلومتر",
+-                style = MaterialTheme.typography.bodyMedium
+-            )
+-            Text(
+-                "زمان سفر: ${faNumber(elapsedMinutes)} دقیقه",
+-                style = MaterialTheme.typography.bodyMedium
+-            )
+-            Text(
+-                "میانگین سرعت: ${faNumber(averageSpeedKmh.roundToInt())} کیلومتر/ساعت",
+-                style = MaterialTheme.typography.bodyMedium
+-            )
+-            Text(
+-                "بیشترین سرعت ثبت‌شده: ${faNumber(maxSpeedKmh.roundToInt())} کیلومتر/ساعت",
+-                style = MaterialTheme.typography.bodyMedium
+-            )
++            if (!hasActualTrace) {
++                Text(
++                    "داده سفر واقعی برای ساخت Trip Story وجود ندارد.",
++                    style = MaterialTheme.typography.bodyLarge,
++                    color = MaterialTheme.colorScheme.error
++                )
++            } else {
++                Text("مسافت واقعی: ${faDistance(actualDistanceKm)} کیلومتر", style = MaterialTheme.typography.bodyMedium)
++                Text("زمان سفر: ${faNumber(elapsedMinutes)} دقیقه", style = MaterialTheme.typography.bodyMedium)
++                Text("میانگین سرعت: ${faNumber(actualAverageSpeed.roundToInt())} کیلومتر/ساعت", style = MaterialTheme.typography.bodyMedium)
++                Text("بیشترین سرعت ثبت‌شده: ${faNumber(actualMaxSpeed.roundToInt())} کیلومتر/ساعت", style = MaterialTheme.typography.bodyMedium)
++            }
+             Text(
+                 "بازمحاسبه مسیر: ${faNumber(rerouteCount)} بار • توقف‌های برنامه‌ریزی‌شده: ${faNumber(waypointCount)}",
+                 style = MaterialTheme.typography.bodySmall,
+@@ -665,6 +754,18 @@
+     }
+ }
+ 
++
++private fun geoDistanceMeters(a: LatLng, b: LatLng): Double {
++    val r = 6371000.0
++    val p1 = Math.toRadians(a.latitude)
++    val p2 = Math.toRadians(b.latitude)
++    val dp = Math.toRadians(b.latitude - a.latitude)
++    val dl = Math.toRadians(b.longitude - a.longitude)
++    val h = kotlin.math.sin(dp / 2) * kotlin.math.sin(dp / 2) +
++        kotlin.math.cos(p1) * kotlin.math.cos(p2) * kotlin.math.sin(dl / 2) * kotlin.math.sin(dl / 2)
++    return 2 * r * kotlin.math.atan2(kotlin.math.sqrt(h), kotlin.math.sqrt(1 - h))
++}
++
+ private fun distanceForSpeech(distanceMeters: Double): String {
+     return if (distanceMeters < 1000.0) {
+         "${distanceMeters.roundToInt()} متر دیگر"
+diff -ruN run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/res/drawable/ic_stop_marker.xml run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/res/drawable/ic_stop_marker.xml
+--- run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/res/drawable/ic_stop_marker.xml	1970-01-01 00:00:00.000000000 +0000
++++ run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/res/drawable/ic_stop_marker.xml	2026-08-30 21:09:33.273032311 +0000
+@@ -0,0 +1,4 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="36dp" android:height="36dp" android:viewportWidth="36" android:viewportHeight="36">
++    <path android:fillColor="#D81B60" android:pathData="M18,2C11.4,2 6,7.4 6,14c0,9 12,20 12,20s12,-11 12,-20C30,7.4 24.6,2 18,2z"/>
++    <path android:fillColor="#FFFFFF" android:pathData="M18,9a5,5 0,1 0,0 10a5,5 0,1 0,0 -10"/>
++</vector>
