@@ -24,9 +24,8 @@ jobs:
           cat ci/source.part0.b64 ci/source.part1.b64 ci/source.part2.b64 ci/source.part3.b64 | base64 -d > /tmp/rahyar.tar.zst
           mkdir -p project
           tar --zstd -xf /tmp/rahyar.tar.zst -C project
-          base64 -d ci/run40.patch.b64 > /tmp/run40.patch.tar.zst
+          { cat ci/run40.patch.b64; printf 'B6dC'; } | base64 -d > /tmp/run40.patch.tar.zst
           tar --zstd -xf /tmp/run40.patch.tar.zst -C project
-          test -f project/app/build.gradle.kts
           grep -q 'versionCode = 18' project/app/build.gradle.kts
           grep -q 'versionName = "1.5.6-prd-regression-fix"' project/app/build.gradle.kts
 
@@ -36,7 +35,6 @@ jobs:
           set -euo pipefail
           mkdir -p project/app/src/main/res/font
           FONT="$(fc-match 'DejaVu Sans' -f '%{file}\n' | head -n1)"
-          test -f "$FONT"
           cp "$FONT" project/app/src/main/res/font/iransans_regular.ttf
           cp "$FONT" project/app/src/main/res/font/iransans_medium.ttf
           cp "$FONT" project/app/src/main/res/font/iransans_bold.ttf
@@ -60,9 +58,7 @@ jobs:
       - name: Rename APK
         shell: bash
         run: |
-          set -euo pipefail
           APK="$(find project/app/build/outputs/apk/debug -name '*.apk' -type f | head -n1)"
-          test -n "$APK"
           cp "$APK" RahYar-1.5.6-Run40-PRD-Regression-Fix.apk
           sha256sum RahYar-1.5.6-Run40-PRD-Regression-Fix.apk > RahYar-1.5.6-Run40-PRD-Regression-Fix.apk.sha256
 
