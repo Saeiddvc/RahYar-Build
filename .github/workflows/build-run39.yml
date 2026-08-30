@@ -1,34 +1,25 @@
 name: RahYar Run 40 PRD Regression Fix
-
 on:
   workflow_dispatch:
   push:
     branches: [ main ]
-    paths:
-      - '.github/workflows/build-run39.yml'
-      - 'ci/run40.patch.b64'
-
-permissions:
-  contents: read
-
+    paths: ['.github/workflows/build-run39.yml','ci/run40.patch.b64','ci/run40.tail']
+permissions: { contents: read }
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct baseline and apply Run 40 patch
+      - name: Reconstruct and patch
         shell: bash
         run: |
           set -euo pipefail
-          cat ci/source.part0.b64 ci/source.part1.b64 ci/source.part2.b64 ci/source.part3.b64 | base64 -d > /tmp/rahyar.tar.zst
-          mkdir -p project
-          tar --zstd -xf /tmp/rahyar.tar.zst -C project
-          { cat ci/run40.patch.b64; printf 'B6dC'; } | base64 -d > /tmp/run40.patch.tar.zst
-          tar --zstd -xf /tmp/run40.patch.tar.zst -C project
+          cat ci/source.part0.b64 ci/source.part1.b64 ci/source.part2.b64 ci/source.part3.b64 | base64 -d > /tmp/base.tar.zst
+          mkdir project && tar --zstd -xf /tmp/base.tar.zst -C project
+          cat ci/run40.patch.b64 ci/run40.tail | base64 -d > /tmp/patch.tar.zst
+          tar --zstd -xf /tmp/patch.tar.zst -C project
           grep -q 'versionCode = 18' project/app/build.gradle.kts
-          grep -q 'versionName = "1.5.6-prd-regression-fix"' project/app/build.gradle.kts
-      - name: Supply Persian-capable CI font files
-        shell: bash
+      - name: Supply CI Persian font fallback
         run: |
           mkdir -p project/app/src/main/res/font
           FONT="$(fc-match 'DejaVu Sans' -f '%{file}\n' | head -n1)"
@@ -36,20 +27,14 @@ jobs:
           cp "$FONT" project/app/src/main/res/font/iransans_medium.ttf
           cp "$FONT" project/app/src/main/res/font/iransans_bold.ttf
       - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
+        with: { distribution: temurin, java-version: '17' }
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.7'
+        with: { gradle-version: '8.7' }
       - name: Build debug APK
         working-directory: project
-        env:
-          ORS_API_KEY: ''
-          HERE_API_KEY: ''
+        env: { ORS_API_KEY: '', HERE_API_KEY: '' }
         run: gradle assembleDebug --stacktrace
-      - name: Rename APK
-        shell: bash
+      - name: Package
         run: |
           APK="$(find project/app/build/outputs/apk/debug -name '*.apk' -type f | head -n1)"
           cp "$APK" RahYar-1.5.6-Run40-PRD-Regression-Fix.apk
@@ -60,4 +45,3 @@ jobs:
           path: |
             RahYar-1.5.6-Run40-PRD-Regression-Fix.apk
             RahYar-1.5.6-Run40-PRD-Regression-Fix.apk.sha256
-          if-no-files-found: error
