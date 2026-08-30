@@ -1,0 +1,250 @@
+@@ -311,7 +315,8 @@
+     LaunchedEffect(
+         mapRef,
+         active?.currentLocation,
+-        active?.bearing
++        active?.bearing,
++        quickSettings.mapViewMode
+     ) {
+         val map = mapRef ?: return@LaunchedEffect
+         val location = active?.currentLocation ?: return@LaunchedEffect
+@@ -337,15 +342,32 @@
+             CameraUpdateFactory.newCameraPosition(
+                 CameraPosition.Builder()
+                     .target(point)
+-                    .bearing((active?.bearing ?: 0f).toDouble())
+-                    .tilt(45.0)
+-                    .zoom(16.8)
++                    .bearing(if (quickSettings.mapViewMode == MapViewMode.NORTH_UP) 0.0 else (active?.bearing ?: 0f).toDouble())
++                    .tilt(if (quickSettings.mapViewMode == MapViewMode.THREE_D) 58.0 else 0.0)
++                    .zoom(if (quickSettings.mapViewMode == MapViewMode.THREE_D) 17.2 else 16.8)
+                     .build()
+             ),
+             450
+         )
+     }
+ 
++    LaunchedEffect(mapRef, session.itinerary?.stops) {
++        val map = mapRef ?: return@LaunchedEffect
++        stopMarkers.forEach { runCatching { map.removeMarker(it) } }
++        val icon = runCatching { IconFactory.getInstance(context).fromResource(R.drawable.ic_stop_marker) }.getOrNull()
++        stopMarkers = session.itinerary?.stops.orEmpty()
++            .filter { it.status != ir.rahyar.app.domain.models.StopStatus.SKIPPED }
++            .sortedBy { it.order }
++            .map { stop ->
++                val options = MarkerOptions()
++                    .position(MapLatLng(stop.location.latitude, stop.location.longitude))
++                    .title("توقف ${faNumber(stop.order)}")
++                    .snippet(if (stop.status == ir.rahyar.app.domain.models.StopStatus.ARRIVED) "انجام شد" else "در انتظار")
++                icon?.let(options::icon)
++                map.addMarker(options)
++            }
++    }
++
+     Column(
+         Modifier
+             .fillMaxSize()
+@@ -418,20 +440,20 @@
+                 QuickToggle("راهنمای صوتی", voiceAvailable && voiceEnabled, voiceAvailable) { enabled ->
+                     scope.launch { settingsRepository.setVoiceGuidance(enabled) }
+                 }
+-                QuickToggle("هشدارهای صوتی", voiceAlertsEnabled) { voiceAlertsEnabled = it }
++                QuickToggle("هشدارهای صوتی", quickSettings.voiceAlertsEnabled) { value -> navigationSession.updateQuickSettings { it.copy(voiceAlertsEnabled = value) } }
+                 Text("نمای نقشه", style = MaterialTheme.typography.titleMedium)
+                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                     listOf("NORTH_UP" to "شمال بالا", "HEADING_UP" to "جهت حرکت", "THREE_D" to "سه‌بعدی").forEach { (key, label) ->
+-                        FilterChip(selected = mapViewMode == key, onClick = { mapViewMode = key }, label = { Text(label) })
++                        FilterChip(selected = quickSettings.mapViewMode.name == key, onClick = { navigationSession.updateQuickSettings { it.copy(mapViewMode = MapViewMode.valueOf(key)) } }, label = { Text(label) })
+                     }
+                 }
+-                QuickToggle("نمایش ترافیک", showTraffic) { showTraffic = it }
+-                QuickToggle("پرهیز از محدوده پرترافیک", avoidTrafficZone) { avoidTrafficZone = it }
+-                QuickToggle("پرهیز از محدوده آلودگی", avoidPollutionZone) { avoidPollutionZone = it }
+-                QuickToggle("پرهیز از عوارضی", avoidTollRoads) { avoidTollRoads = it }
+-                QuickToggle("بازمسیر‌یابی در ترافیک سنگین", rerouteHeavyTraffic) { rerouteHeavyTraffic = it }
+-                QuickToggle("بازمسیر‌یابی در آب‌وهوای شدید", rerouteSevereWeather) { rerouteSevereWeather = it }
+-                QuickToggle("هشدار محدودیت سرعت", speedLimitAlerts) { speedLimitAlerts = it }
++                QuickToggle("نمایش ترافیک", quickSettings.showTraffic) { value -> navigationSession.updateQuickSettings { it.copy(showTraffic = value) } }
++                QuickToggle("پرهیز از محدوده پرترافیک", quickSettings.avoidTrafficZone) { value -> scope.launch { settingsRepository.setAvoidTrafficZone(value) }; navigationSession.updateQuickSettings { it.copy(avoidTrafficZone = value) } }
++                QuickToggle("پرهیز از محدوده آلودگی", quickSettings.avoidPollutionZone) { value -> scope.launch { settingsRepository.setAvoidPollutionZone(value) }; navigationSession.updateQuickSettings { it.copy(avoidPollutionZone = value) } }
++                QuickToggle("پرهیز از عوارضی", quickSettings.avoidTollRoads) { value -> scope.launch { settingsRepository.setAvoidTolls(value) }; navigationSession.updateQuickSettings { it.copy(avoidTollRoads = value) } }
++                QuickToggle("بازمسیر‌یابی در ترافیک سنگین", quickSettings.rerouteOnHeavyTraffic) { value -> navigationSession.updateQuickSettings { it.copy(rerouteOnHeavyTraffic = value) } }
++                QuickToggle("بازمسیر‌یابی در آب‌وهوای شدید", quickSettings.rerouteOnSevereWeather) { value -> navigationSession.updateQuickSettings { it.copy(rerouteOnSevereWeather = value) } }
++                QuickToggle("هشدار محدودیت سرعت", quickSettings.speedLimitAlertsEnabled) { value -> navigationSession.updateQuickSettings { it.copy(speedLimitAlertsEnabled = value) } }
+                 if (!voiceAvailable) Text("صدای فارسی سازگار روی دستگاه در دسترس نیست", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                 Spacer(Modifier.height(12.dp))
+             }
+@@ -442,17 +464,79 @@
+         ModalBottomSheet(onDismissRequest = { showMidRouteServices = false }) {
+             Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(20.dp)) {
+                 Text("خدمات میان‌راه", style = MaterialTheme.typography.titleLarge)
+-                Text("پیشنهادها فقط در امتداد مسیر و با حفظ مقصد نهایی اضافه می‌شوند.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
++                Text("فقط گزینه‌های روی مسیر و جلوتر از موقعیت فعلی نمایش داده می‌شوند؛ مقصد نهایی تغییر نمی‌کند.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                 Spacer(Modifier.height(12.dp))
+-                listOf("پمپ بنزین", "استراحتگاه", "سرویس بهداشتی", "پارکینگ", "رستوران", "کافه", "بیمارستان", "اورژانس", "گردشگری").chunked(3).forEach { row ->
++                val categories = listOf(
++                    "پمپ بنزین" to PoiType.GAS_STATION, "مجتمع رفاهی" to PoiType.REST_AREA, "سرویس بهداشتی" to PoiType.TOILET,
++                    "پارکینگ" to PoiType.PARKING, "رستوران" to PoiType.FOOD, "کافه" to PoiType.CAFE,
++                    "بیمارستان" to PoiType.HOSPITAL, "اورژانس" to PoiType.EMERGENCY, "دیدنی" to PoiType.SIGHTSEEING
++                )
++                categories.chunked(3).forEach { row ->
+                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-                        row.forEach { label ->
+-                            OutlinedButton(onClick = { }, modifier = Modifier.weight(1f)) { Text(label) }
++                        row.forEach { (label, type) ->
++                            OutlinedButton(
++                                onClick = {
++                                    scope.launch {
++                                        poiLoading = true; poiError = null; poiResults = emptyList()
++                                        val current = active?.currentLocation ?: session.origin
++                                        val currentRoute = active?.route ?: initialRoute
++                                        if (current == null) {
++                                            poiError = "موقعیت فعلی هنوز دریافت نشده است"; poiLoading = false
++                                        } else {
++                                            runCatching {
++                                                val raw = destinationSearchRepository.searchAlongRoute(label, type, currentRoute, current)
++                                                val base = routeRepository.getRoutes(current, destination, session.transportMode, session.waypoints)
++                                                    .filter { it.distanceKm > 0.0 && it.durationMinutes > 0 }
++                                                    .minByOrNull { it.durationMinutes }
++                                                raw.take(5).map { poi ->
++                                                    val withStop = routeRepository.getRoutes(current, destination, session.transportMode, session.waypoints + poi.location)
++                                                        .filter { it.distanceKm > 0.0 && it.durationMinutes > 0 }
++                                                        .minByOrNull { it.durationMinutes }
++                                                    if (base != null && withStop != null) poi.copy(
++                                                        detourDistanceMeters = ((withStop.distanceKm - base.distanceKm).coerceAtLeast(0.0) * 1000).roundToInt(),
++                                                        detourDurationMinutes = (withStop.durationMinutes - base.durationMinutes).coerceAtLeast(0)
++                                                    ) else poi
++                                                }.sortedWith(compareBy<Poi> { it.detourDurationMinutes }.thenBy { it.distanceFromRouteMeters })
++                                            }.onSuccess { poiResults = it }
++                                                .onFailure { poiError = "دریافت خدمات میان‌راه انجام نشد" }
++                                            poiLoading = false
++                                        }
++                                    }
++                                },
++                                modifier = Modifier.weight(1f)
++                            ) { Text(label) }
++                        }
++                    }
++                }
++                if (poiLoading) { Spacer(Modifier.height(12.dp)); LinearProgressIndicator(Modifier.fillMaxWidth()) }
++                poiError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
++                poiResults.forEachIndexed { index, poi ->
++                    Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
++                        Column(Modifier.padding(12.dp)) {
++                            Text("${faNumber(index + 1)}. ${poi.name}", style = MaterialTheme.typography.titleSmall)
++                            Text("فاصله از مسیر ${faNumber(poi.distanceFromRouteMeters)} متر • انحراف ${faNumber(poi.detourDistanceMeters)} متر • ${faNumber(poi.detourDurationMinutes)} دقیقه", style = MaterialTheme.typography.bodySmall)
++                            Button(
++                                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
++                                onClick = {
++                                    scope.launch {
++                                        val current = active?.currentLocation ?: session.origin ?: return@launch
++                                        navigationSession.addStop(poi.location, poi.id)
++                                        val refreshed = navigationSession.state.value
++                                        val newRoute = routeRepository.getRoutes(current, destination, refreshed.transportMode, refreshed.waypoints)
++                                            .filter { it.distanceKm > 0.0 && it.durationMinutes > 0 }
++                                            .minByOrNull { it.durationMinutes }
++                                        if (newRoute != null) {
++                                            navigationSession.selectRoute(newRoute)
++                                            engine.startNavigation(newRoute, destination)
++                                            showMidRouteServices = false
++                                        } else poiError = "افزودن توقف به مسیر انجام نشد"
++                                    }
++                                }
++                            ) { Text("افزودن به عنوان توقف") }
+                         }
+                     }
+                 }
+-                Spacer(Modifier.height(8.dp))
+-                Text("در این Build، دسته‌بندی و نقطه ورود خدمات فعال است؛ نتیجه قطعی فقط پس از دریافت POI معتبر و محاسبه detour نمایش داده می‌شود.", style = MaterialTheme.typography.bodySmall)
++                Spacer(Modifier.height(12.dp))
+             }
+         }
+     }
+@@ -470,6 +554,7 @@
+                         showEndConfirm = false
+                         endedSnapshot = active
+                         tripEndedAtMillis = System.currentTimeMillis()
++                        navigationSession.endTrip()
+                         engine.stopNavigation()
+                         voiceManager.stop()
+                         showTripStory = true
+@@ -489,9 +574,11 @@
+     }
+ 
+     if (showTripStory) {
++        val trace = session.tripTrace.points
+         TripStorySheet(
+             route = initialRoute,
+-            startTimeMillis = tripStartedAtMillis,
++            trace = trace,
++            startTimeMillis = session.tripStartedAtMillis ?: tripStartedAtMillis,
+             endTimeMillis = tripEndedAtMillis.takeIf { it > 0L }
+                 ?: System.currentTimeMillis(),
+             averageSpeedKmh = if (speedSampleCount > 0) {
+@@ -538,6 +625,7 @@
+ @Composable
+ private fun TripStorySheet(
+     route: Route,
++    trace: List<ir.rahyar.app.navigation.TracePoint>,
+     startTimeMillis: Long,
+     endTimeMillis: Long,
+     averageSpeedKmh: Double,
+@@ -550,10 +638,15 @@
+ ) {
+     var rating by remember { mutableStateOf<Int?>(null) }
+ 
+-    val elapsedMinutes = (
+-        (endTimeMillis - startTimeMillis)
+-            .coerceAtLeast(0L) / 60_000L
+-        ).toInt()
++    val hasActualTrace = trace.size >= 2
++    val elapsedMinutes = if (hasActualTrace) {
++        ((trace.last().timestampMillis - trace.first().timestampMillis).coerceAtLeast(0L) / 60_000L).toInt()
++    } else 0
++    val actualDistanceKm = if (hasActualTrace) {
++        trace.zipWithNext().sumOf { (a, b) -> geoDistanceMeters(a.location, b.location) } / 1000.0
++    } else 0.0
++    val actualAverageSpeed = if (hasActualTrace) trace.map { it.speedKmh }.average() else 0.0
++    val actualMaxSpeed = if (hasActualTrace) trace.maxOf { it.speedKmh } else 0.0
+ 
+     ModalBottomSheet(
+         onDismissRequest = {}
+@@ -570,22 +663,18 @@
+             )
+             Spacer(Modifier.height(8.dp))
+ 
+-            Text(
+-                "مسافت برنامه‌ریزی‌شده: ${faDistance(route.distanceKm)} کیلومتر",
+-                style = MaterialTheme.typography.bodyMedium
+-            )
+-            Text(
+-                "زمان سفر: ${faNumber(elapsedMinutes)} دقیقه",
+-                style = MaterialTheme.typography.bodyMedium
+-            )
+-            Text(
+-                "میانگین سرعت: ${faNumber(averageSpeedKmh.roundToInt())} کیلومتر/ساعت",
+-                style = MaterialTheme.typography.bodyMedium
+-            )
+-            Text(
+-                "بیشترین سرعت ثبت‌شده: ${faNumber(maxSpeedKmh.roundToInt())} کیلومتر/ساعت",
+-                style = MaterialTheme.typography.bodyMedium
+-            )
++            if (!hasActualTrace) {
++                Text(
++                    "داده سفر واقعی برای ساخت Trip Story وجود ندارد.",
++                    style = MaterialTheme.typography.bodyLarge,
++                    color = MaterialTheme.colorScheme.error
++                )
++            } else {
++                Text("مسافت واقعی: ${faDistance(actualDistanceKm)} کیلومتر", style = MaterialTheme.typography.bodyMedium)
++                Text("زمان سفر: ${faNumber(elapsedMinutes)} دقیقه", style = MaterialTheme.typography.bodyMedium)
++                Text("میانگین سرعت: ${faNumber(actualAverageSpeed.roundToInt())} کیلومتر/ساعت", style = MaterialTheme.typography.bodyMedium)
++                Text("بیشترین سرعت ثبت‌شده: ${faNumber(actualMaxSpeed.roundToInt())} کیلومتر/ساعت", style = MaterialTheme.typography.bodyMedium)
++            }
+             Text(
+                 "بازمحاسبه مسیر: ${faNumber(rerouteCount)} بار • توقف‌های برنامه‌ریزی‌شده: ${faNumber(waypointCount)}",
+                 style = MaterialTheme.typography.bodySmall,
+@@ -665,6 +754,18 @@
+     }
+ }
+ 
