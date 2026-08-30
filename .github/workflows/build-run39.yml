@@ -1,16 +1,16 @@
-name: RahYar Run 40 PRD Regression Fix
+name: RahYar Run 41 Functional Core
 on:
   workflow_dispatch:
   push:
     branches: [ main ]
-    paths: ['.github/workflows/build-run39.yml','ci/run40.diff.0','ci/run40.diff.1','ci/run40.fix1.diff']
+    paths: ['.github/workflows/build-run39.yml','ci/run41.diff.0','ci/run41.diff.1','ci/run41.diff.2','ci/run41.diff.3']
 permissions: { contents: read }
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct Run39 baseline and apply Run40 diff
+      - name: Reconstruct Run39 baseline and apply Run40 plus Run41
         shell: bash
         run: |
           set -euo pipefail
@@ -21,8 +21,12 @@ jobs:
           cd project
           patch -p1 < /tmp/run40.diff
           patch -p1 < ../ci/run40.fix1.diff
-          grep -q 'versionCode = 18' app/build.gradle.kts
-          grep -q 'versionName = "1.5.6-prd-regression-fix"' app/build.gradle.kts
+          cd ..
+          cat ci/run41.diff.0 ci/run41.diff.1 ci/run41.diff.2 ci/run41.diff.3 > /tmp/run41.diff
+          cd project
+          patch -p2 < /tmp/run41.diff
+          grep -q 'versionCode = 19' app/build.gradle.kts
+          grep -q 'versionName = "1.5.7-functional-core"' app/build.gradle.kts
       - name: Supply build-time Persian font resources
         shell: bash
         run: |
@@ -45,12 +49,12 @@ jobs:
         run: |
           set -euo pipefail
           APK="$(find project/app/build/outputs/apk/debug -name '*.apk' -type f | head -n1)"
-          cp "$APK" RahYar-1.5.6-Run40-PRD-Regression-Fix.apk
-          sha256sum RahYar-1.5.6-Run40-PRD-Regression-Fix.apk > RahYar-1.5.6-Run40-PRD-Regression-Fix.apk.sha256
+          cp "$APK" RahYar-1.5.7-Run41-Functional-Core.apk
+          sha256sum RahYar-1.5.7-Run41-Functional-Core.apk > RahYar-1.5.7-Run41-Functional-Core.apk.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: RahYar-1.5.6-Run40-PRD-Regression-Fix
+          name: RahYar-1.5.7-Run41-Functional-Core
           path: |
-            RahYar-1.5.6-Run40-PRD-Regression-Fix.apk
-            RahYar-1.5.6-Run40-PRD-Regression-Fix.apk.sha256
+            RahYar-1.5.7-Run41-Functional-Core.apk
+            RahYar-1.5.7-Run41-Functional-Core.apk.sha256
           if-no-files-found: error
