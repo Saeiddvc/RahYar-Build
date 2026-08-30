@@ -1,0 +1,227 @@
+diff -ruN run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/build.gradle.kts run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/build.gradle.kts
+--- run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/build.gradle.kts	2026-08-30 15:10:00.000000000 +0000
++++ run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/build.gradle.kts	2026-08-30 21:08:14.688821080 +0000
+@@ -16,8 +16,8 @@
+         applicationId = "ir.rahyar.app"
+         minSdk = 24
+         targetSdk = 34
+-        versionCode = 18
+-        versionName = "1.5.6-prd-regression-fix"
++        versionCode = 19
++        versionName = "1.5.7-functional-core"
+         buildConfigField("String", "ORS_API_KEY", "\"${orsApiKey.escapeBuildConfig()}\"")
+         buildConfigField("String", "HERE_API_KEY", "\"${hereApiKey.escapeBuildConfig()}\"")
+     }
+diff -ruN run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt
+--- run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt	2026-08-30 08:36:26.000000000 +0000
++++ run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt	2026-08-30 21:10:02.351152068 +0000
+@@ -10,6 +10,7 @@
+ import ir.rahyar.app.domain.models.RouteType
+ import ir.rahyar.app.domain.repository.RouteRepository
+ import ir.rahyar.app.navigation.NavigationSession
++import ir.rahyar.app.navigation.TracePoint
+ import kotlinx.coroutines.CancellationException
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+@@ -73,6 +74,7 @@
+     fun startNavigation(route: Route, destination: LatLng) {
+         currentRoute = route
+         this.destination = destination
++        session.beginNavigation(route)
+         offRouteCount = 0
+         rerouteCount = 0
+         if (!wakeLock.isHeld) {
+@@ -128,6 +130,16 @@
+         }
+ 
+         val current = LatLng(location.latitude, location.longitude)
++        session.appendTracePoint(TracePoint(current, System.currentTimeMillis(), max(0.0, location.speed * 3.6), if (location.hasBearing()) location.bearing else lastReliableBearing))
++
++        val nextStop = session.state.value.itinerary?.stops
++            ?.filter { it.status == ir.rahyar.app.domain.models.StopStatus.PENDING }
++            ?.minByOrNull { it.order }
++        if (nextStop != null && distanceMeters(current, nextStop.location) <= 45.0) {
++            session.updateStopStatus(nextStop.id, ir.rahyar.app.domain.models.StopStatus.ARRIVED)
++            if (rerouteJob?.isActive != true) rerouteJob = scope.launch { reroute(current, dest) }
++        }
++
+         val match = nearestSegmentMatch(route, current)
+         val routeHeading = bearingDegrees(route.points[match.segmentIndex], route.points[match.segmentIndex + 1])
+         val speedReliable = Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !location.hasSpeedAccuracy() || location.speedAccuracyMetersPerSecond <= 2.5f
+diff -ruN run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
+--- run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt	2026-08-30 08:36:26.000000000 +0000
++++ run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt	2026-08-30 21:08:49.579451069 +0000
+@@ -2,6 +2,10 @@
+ 
+ import android.content.Context
+ import ir.rahyar.app.domain.models.LatLng
++import ir.rahyar.app.domain.models.Poi
++import ir.rahyar.app.domain.models.PoiReliability
++import ir.rahyar.app.domain.models.PoiType
++import ir.rahyar.app.domain.models.Route
+ import ir.rahyar.app.domain.models.SearchResult
+ import ir.rahyar.app.domain.repository.DestinationSearchRepository
+ import kotlinx.coroutines.Dispatchers
+@@ -11,6 +15,7 @@
+ import java.net.URLEncoder
+ import java.net.URL
+ import java.util.Locale
++import kotlin.math.*
+ 
+ class DestinationSearchRepositoryImpl(
+     context: Context
+@@ -89,6 +94,69 @@
+         }
+     }
+ 
++    override suspend fun searchAlongRoute(
++        query: String,
++        type: PoiType,
++        route: Route,
++        currentLocation: LatLng
++    ): List<Poi> = withContext(Dispatchers.IO) {
++        if (route.points.size < 2) return@withContext emptyList()
++
++        val minLat = route.points.minOf { it.latitude } - 0.035
++        val maxLat = route.points.maxOf { it.latitude } + 0.035
++        val minLng = route.points.minOf { it.longitude } - 0.045
++        val maxLng = route.points.maxOf { it.longitude } + 0.045
++        val encoded = URLEncoder.encode(query.trim(), Charsets.UTF_8.name())
++        val viewbox = "$minLng,$maxLat,$maxLng,$minLat"
++        val url = URL(
++            "https://nominatim.openstreetmap.org/search" +
++                "?format=jsonv2&addressdetails=1&accept-language=fa&countrycodes=ir&limit=30&bounded=1&viewbox=$viewbox&q=$encoded"
++        )
++        val connection = (url.openConnection() as HttpURLConnection).apply {
++            connectTimeout = 8000
++            readTimeout = 8000
++            requestMethod = "GET"
++            setRequestProperty("User-Agent", "RahYar/1.5.7 Android")
++            setRequestProperty("Accept", "application/json")
++        }
++        try {
++            if (connection.responseCode !in 200..299) return@withContext emptyList()
++            val body = connection.inputStream.bufferedReader().use { it.readText() }
++            val array = JSONArray(body)
++            val currentIndex = nearestRouteIndex(route, currentLocation)
++            buildList {
++                for (i in 0 until array.length()) {
++                    val obj = array.getJSONObject(i)
++                    val lat = obj.optString("lat").toDoubleOrNull() ?: continue
++                    val lon = obj.optString("lon").toDoubleOrNull() ?: continue
++                    val point = LatLng(lat, lon)
++                    val nearestIndex = nearestRouteIndex(route, point)
++                    val distanceFromRoute = distanceMeters(point, route.points[nearestIndex]).roundToInt()
++                    val ahead = nearestIndex + 2 >= currentIndex
++                    if (!ahead || distanceFromRoute > 3500) continue
++                    val display = obj.optString("display_name").trim()
++                    val name = obj.optString("name").trim().ifBlank { display.substringBefore(',').trim().ifBlank { query } }
++                    add(
++                        Poi(
++                            id = "nominatim_${obj.optString("place_id", i.toString())}",
++                            type = type,
++                            name = name,
++                            location = point,
++                            distanceFromRouteMeters = distanceFromRoute,
++                            detourDistanceMeters = 0,
++                            detourDurationMinutes = 0,
++                            isAheadOfUser = true,
++                            isOpenNow = null,
++                            reliability = PoiReliability.UNKNOWN
++                        )
++                    )
++                }
++            }.distinctBy { it.id }.sortedBy { it.distanceFromRouteMeters }.take(8)
++        } finally {
++            connection.disconnect()
++        }
++    }
++
+     override suspend fun recentDestinations(): List<SearchResult> = withContext(Dispatchers.IO) {
+         val raw = prefs.getString("items", "[]") ?: "[]"
+         val array = runCatching { JSONArray(raw) }.getOrElse { JSONArray() }
+@@ -135,4 +203,18 @@
+             .putString("items", array.toString())
+             .apply()
+     }
++
++
++    private fun nearestRouteIndex(route: Route, point: LatLng): Int =
++        route.points.indices.minByOrNull { distanceMeters(route.points[it], point) } ?: 0
++
++    private fun distanceMeters(a: LatLng, b: LatLng): Double {
++        val r = 6371000.0
++        val p1 = Math.toRadians(a.latitude)
++        val p2 = Math.toRadians(b.latitude)
++        val dp = Math.toRadians(b.latitude - a.latitude)
++        val dl = Math.toRadians(b.longitude - a.longitude)
++        val h = sin(dp / 2).pow(2) + cos(p1) * cos(p2) * sin(dl / 2).pow(2)
++        return 2 * r * atan2(sqrt(h), sqrt(1 - h))
++    }
+ }
+diff -ruN run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/domain/repository/DestinationSearchRepository.kt run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/domain/repository/DestinationSearchRepository.kt
+--- run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/domain/repository/DestinationSearchRepository.kt	2026-08-30 08:36:26.000000000 +0000
++++ run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/domain/repository/DestinationSearchRepository.kt	2026-08-30 21:08:49.084504070 +0000
+@@ -1,9 +1,14 @@
+ package ir.rahyar.app.domain.repository
+ 
++import ir.rahyar.app.domain.models.GeoPoint
++import ir.rahyar.app.domain.models.Poi
++import ir.rahyar.app.domain.models.PoiType
++import ir.rahyar.app.domain.models.Route
+ import ir.rahyar.app.domain.models.SearchResult
+ 
+ interface DestinationSearchRepository {
+     suspend fun search(query: String): List<SearchResult>
++    suspend fun searchAlongRoute(query: String, type: PoiType, route: Route, currentLocation: GeoPoint): List<Poi>
+     suspend fun recentDestinations(): List<SearchResult>
+     suspend fun saveRecent(result: SearchResult)
+ }
+diff -ruN run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt
+--- run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt	2026-08-30 08:36:26.000000000 +0000
++++ run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt	2026-08-30 21:10:02.350960804 +0000
+@@ -1,24 +1,63 @@
+ package ir.rahyar.app.navigation
+ 
+-import ir.rahyar.app.domain.models.LatLng
+-import ir.rahyar.app.domain.models.Route
+-import ir.rahyar.app.domain.models.SearchResult
+-import ir.rahyar.app.domain.models.TransportMode
++import ir.rahyar.app.domain.models.*
+ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.flow.StateFlow
+ import kotlinx.coroutines.flow.asStateFlow
+ import kotlinx.coroutines.flow.update
++import java.util.UUID
++
++sealed interface NavigationState {
++    data object Idle : NavigationState
++    data class DestinationSelected(val destination: GeoPoint) : NavigationState
++    data class RoutePreview(val route: Route) : NavigationState
++    data class Navigating(val route: Route) : NavigationState
++    data object TripEnded : NavigationState
++}
++
++data class TracePoint(
++    val location: GeoPoint,
++    val timestampMillis: Long,
++    val speedKmh: Double,
++    val heading: Float
++)
++
++data class TripTrace(val points: List<TracePoint> = emptyList())
+ 
+ data class NavigationSessionState(
++    val navigationState: NavigationState = NavigationState.Idle,
++    val sessionId: String? = null,
++    val tripStartedAtMillis: Long? = null,
++    val tripEndedAtMillis: Long? = null,
+     val destinationCandidate: SearchResult? = null,
+-    val destination: LatLng? = null,
+-    val origin: LatLng? = null,
++    val destination: GeoPoint? = null,
++    val origin: GeoPoint? = null,
++    val itinerary: Itinerary? = null,
+     val selectedRoute: Route? = null,
+     val transportMode: TransportMode = TransportMode.CAR,
+-    val waypoints: List<LatLng> = emptyList(),
