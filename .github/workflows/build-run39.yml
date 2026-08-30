@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
-    paths: ['.github/workflows/build-run39.yml','ci/run41.diff.0','ci/run41.diff.1','ci/run41.diff.2','ci/run41.diff.3']
+    paths: ['.github/workflows/build-run39.yml','ci/run41b.diff.0','ci/run41b.diff.1','ci/run41b.diff.2','ci/run41b.diff.3']
 permissions: { contents: read }
 jobs:
   build:
@@ -22,7 +22,7 @@ jobs:
           patch -p1 < /tmp/run40.diff
           patch -p1 < ../ci/run40.fix1.diff
           cd ..
-          cat ci/run41.diff.0 ci/run41.diff.1 ci/run41.diff.2 ci/run41.diff.3 > /tmp/run41.diff
+          cat ci/run41b.diff.0 ci/run41b.diff.1 ci/run41b.diff.2 ci/run41b.diff.3 > /tmp/run41.diff
           cd project
           patch -p2 < /tmp/run41.diff
           grep -q 'versionCode = 19' app/build.gradle.kts
