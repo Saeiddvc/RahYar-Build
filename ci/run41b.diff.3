@@ -1,0 +1,23 @@
++
++private fun geoDistanceMeters(a: LatLng, b: LatLng): Double {
++    val r = 6371000.0
++    val p1 = Math.toRadians(a.latitude)
++    val p2 = Math.toRadians(b.latitude)
++    val dp = Math.toRadians(b.latitude - a.latitude)
++    val dl = Math.toRadians(b.longitude - a.longitude)
++    val h = kotlin.math.sin(dp / 2) * kotlin.math.sin(dp / 2) +
++        kotlin.math.cos(p1) * kotlin.math.cos(p2) * kotlin.math.sin(dl / 2) * kotlin.math.sin(dl / 2)
++    return 2 * r * kotlin.math.atan2(kotlin.math.sqrt(h), kotlin.math.sqrt(1 - h))
++}
++
+ private fun distanceForSpeech(distanceMeters: Double): String {
+     return if (distanceMeters < 1000.0) {
+         "${distanceMeters.roundToInt()} متر دیگر"
+diff -ruN run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/res/drawable/ic_stop_marker.xml run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/res/drawable/ic_stop_marker.xml
+--- run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/res/drawable/ic_stop_marker.xml	1970-01-01 00:00:00.000000000 +0000
++++ run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/res/drawable/ic_stop_marker.xml	2026-08-30 21:09:33.273032311 +0000
+@@ -0,0 +1,4 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="36dp" android:height="36dp" android:viewportWidth="36" android:viewportHeight="36">
++    <path android:fillColor="#D81B60" android:pathData="M18,2C11.4,2 6,7.4 6,14c0,9 12,20 12,20s12,-11 12,-20C30,7.4 24.6,2 18,2z"/>
++    <path android:fillColor="#FFFFFF" android:pathData="M18,9a5,5 0,1 0,0 10a5,5 0,1 0,0 -10"/>
++</vector>
