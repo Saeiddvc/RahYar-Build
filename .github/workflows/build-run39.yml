@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
-    paths: ['.github/workflows/build-run39.yml','ci/run40.diff.0','ci/run40.diff.1']
+    paths: ['.github/workflows/build-run39.yml','ci/run40.diff.0','ci/run40.diff.1','ci/run40.fix1.diff']
 permissions: { contents: read }
 jobs:
   build:
@@ -20,6 +20,7 @@ jobs:
           cat ci/run40.diff.0 ci/run40.diff.1 > /tmp/run40.diff
           cd project
           patch -p1 < /tmp/run40.diff
+          patch -p1 < ../ci/run40.fix1.diff
           grep -q 'versionCode = 18' app/build.gradle.kts
           grep -q 'versionName = "1.5.6-prd-regression-fix"' app/build.gradle.kts
       - name: Supply build-time Persian font resources
