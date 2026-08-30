@@ -1,4 +1,4 @@
-name: RahYar Run 39 Public Build
+name: RahYar Run 40 PRD Regression Fix
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     branches: [ main ]
     paths:
       - '.github/workflows/build-run39.yml'
-      - 'ci/source.part*.b64'
+      - 'ci/run40.patch.b64'
 
 permissions:
   contents: read
@@ -17,18 +17,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Reconstruct Run 39 source
+      - name: Reconstruct baseline and apply Run 40 patch
         shell: bash
         run: |
           set -euo pipefail
           cat ci/source.part0.b64 ci/source.part1.b64 ci/source.part2.b64 ci/source.part3.b64 | base64 -d > /tmp/rahyar.tar.zst
           mkdir -p project
           tar --zstd -xf /tmp/rahyar.tar.zst -C project
+          base64 -d ci/run40.patch.b64 > /tmp/run40.patch.tar.zst
+          tar --zstd -xf /tmp/run40.patch.tar.zst -C project
           test -f project/app/build.gradle.kts
-          grep -q 'versionCode = 17' project/app/build.gradle.kts
-          grep -q 'versionName = "1.5.5-field-test"' project/app/build.gradle.kts
+          grep -q 'versionCode = 18' project/app/build.gradle.kts
+          grep -q 'versionName = "1.5.6-prd-regression-fix"' project/app/build.gradle.kts
 
-      - name: Supply CI-only Persian-capable font files
+      - name: Supply Persian-capable CI font files
         shell: bash
         run: |
           set -euo pipefail
@@ -61,13 +63,13 @@ jobs:
           set -euo pipefail
           APK="$(find project/app/build/outputs/apk/debug -name '*.apk' -type f | head -n1)"
           test -n "$APK"
-          cp "$APK" RahYar-1.5.5-Run39-Field-Test.apk
-          sha256sum RahYar-1.5.5-Run39-Field-Test.apk > RahYar-1.5.5-Run39-Field-Test.apk.sha256
+          cp "$APK" RahYar-1.5.6-Run40-PRD-Regression-Fix.apk
+          sha256sum RahYar-1.5.6-Run40-PRD-Regression-Fix.apk > RahYar-1.5.6-Run40-PRD-Regression-Fix.apk.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: RahYar-1.5.5-Run39-Field-Test
+          name: RahYar-1.5.6-Run40-PRD-Regression-Fix
           path: |
-            RahYar-1.5.5-Run39-Field-Test.apk
-            RahYar-1.5.5-Run39-Field-Test.apk.sha256
+            RahYar-1.5.6-Run40-PRD-Regression-Fix.apk
+            RahYar-1.5.6-Run40-PRD-Regression-Fix.apk.sha256
           if-no-files-found: error
