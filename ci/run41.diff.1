@@ -1,0 +1,266 @@
+ts: List<LatLng> = emptyList(),
++    val tripTrace: TripTrace = TripTrace(),
++    val quickSettings: QuickSettings = QuickSettings(
++        voiceGuidanceEnabled = true,
++        voiceAlertsEnabled = true,
++        mapViewMode = MapViewMode.HEADING_UP,
++        showTraffic = false,
++        avoidTrafficZone = false,
++        avoidPollutionZone = false,
++        avoidTollRoads = false,
++        rerouteOnHeavyTraffic = false,
++        rerouteOnSevereWeather = false,
++        speedLimitAlertsEnabled = true
++    ),
+     val weatherSummary: String? = null,
+     val trafficSummary: String? = null
+-)
++) {
++    val waypoints: List<GeoPoint>
++        get() = itinerary?.stops
++            ?.filter { it.status == StopStatus.PENDING }
++            ?.sortedBy { it.order }
++            ?.map { it.location }
++            .orEmpty()
++}
+ 
+ class NavigationSession {
+     private val _state = MutableStateFlow(NavigationSessionState())
+@@ -31,9 +70,12 @@
+     fun confirmDestination() {
+         _state.update { current ->
+             val candidate = current.destinationCandidate ?: return@update current
++            val itinerary = current.origin?.let { Itinerary(it, emptyList(), candidate.location) }
+             current.copy(
++                navigationState = NavigationState.DestinationSelected(candidate.location),
+                 destinationCandidate = null,
+                 destination = candidate.location,
++                itinerary = itinerary,
+                 selectedRoute = null,
+                 weatherSummary = null,
+                 trafficSummary = null
+@@ -41,11 +83,14 @@
+         }
+     }
+ 
+-    fun setDestination(destination: LatLng) {
+-        _state.update {
+-            it.copy(
++    fun setDestination(destination: GeoPoint) {
++        _state.update { current ->
++            val itinerary = current.origin?.let { Itinerary(it, emptyList(), destination) }
++            current.copy(
++                navigationState = NavigationState.DestinationSelected(destination),
+                 destinationCandidate = null,
+                 destination = destination,
++                itinerary = itinerary,
+                 selectedRoute = null,
+                 weatherSummary = null,
+                 trafficSummary = null
+@@ -53,68 +98,96 @@
+         }
+     }
+ 
+-    fun setOrigin(origin: LatLng) {
+-        _state.update { it.copy(origin = origin) }
++    fun setOrigin(origin: GeoPoint) {
++        _state.update { current ->
++            val itinerary = current.destination?.let { dest ->
++                val existingStops = current.itinerary?.stops.orEmpty()
++                Itinerary(origin, existingStops, dest)
++            }
++            current.copy(origin = origin, itinerary = itinerary)
++        }
+     }
+ 
+     fun setTransportMode(mode: TransportMode) {
+-        _state.update {
+-            it.copy(
+-                transportMode = mode,
+-                selectedRoute = null,
+-                weatherSummary = null,
+-                trafficSummary = null
+-            )
++        _state.update { it.copy(transportMode = mode, selectedRoute = null, weatherSummary = null, trafficSummary = null) }
++    }
++
++    /** Compatibility bridge. Real source of truth is Itinerary.stops. */
++    fun setWaypoints(waypoints: List<GeoPoint>) {
++        _state.update { current ->
++            val origin = current.origin ?: return@update current
++            val destination = current.destination ?: return@update current
++            val stops = waypoints.mapIndexed { index, point ->
++                ItineraryStop("legacy-${index}-${point.latitude}-${point.longitude}", point, index + 1, StopStatus.PENDING)
++            }
++            current.copy(itinerary = Itinerary(origin, stops, destination), selectedRoute = null)
+         }
+     }
+ 
+-    fun setWaypoints(waypoints: List<LatLng>) {
+-        _state.update {
+-            it.copy(
+-                waypoints = waypoints,
+-                selectedRoute = null,
+-                weatherSummary = null,
+-                trafficSummary = null
++    fun addStop(location: GeoPoint, id: String = UUID.randomUUID().toString()) {
++        _state.update { current ->
++            val origin = current.origin ?: return@update current
++            val destination = current.destination ?: return@update current
++            val itinerary = current.itinerary ?: Itinerary(origin, emptyList(), destination)
++            val nextOrder = (itinerary.stops.maxOfOrNull { it.order } ?: 0) + 1
++            current.copy(
++                itinerary = itinerary.copy(stops = itinerary.stops + ItineraryStop(id, location, nextOrder, StopStatus.PENDING)),
++                selectedRoute = null
+             )
+         }
+     }
+ 
++    fun updateStopStatus(id: String, status: StopStatus) {
++        _state.update { current ->
++            val itinerary = current.itinerary ?: return@update current
++            current.copy(itinerary = itinerary.copy(stops = itinerary.stops.map { if (it.id == id) it.copy(status = status) else it }))
++        }
++    }
++
++    fun updateQuickSettings(transform: (QuickSettings) -> QuickSettings) {
++        _state.update { it.copy(quickSettings = transform(it.quickSettings)) }
++    }
++
+     fun selectRoute(route: Route) {
+-        _state.update {
+-            it.copy(
++        _state.update { current ->
++            current.copy(
++                navigationState = NavigationState.RoutePreview(route),
+                 selectedRoute = route,
+                 transportMode = route.transportMode
+             )
+         }
+     }
+ 
+-    fun setTripContext(
+-        weatherSummary: String?,
+-        trafficSummary: String?
+-    ) {
+-        _state.update {
+-            it.copy(
+-                weatherSummary = weatherSummary,
+-                trafficSummary = trafficSummary
++    fun beginNavigation(route: Route) {
++        _state.update { current ->
++            val alreadyNavigating = current.navigationState is NavigationState.Navigating
++            current.copy(
++                navigationState = NavigationState.Navigating(route),
++                sessionId = current.sessionId ?: UUID.randomUUID().toString(),
++                tripStartedAtMillis = current.tripStartedAtMillis ?: System.currentTimeMillis(),
++                tripEndedAtMillis = null,
++                tripTrace = if (alreadyNavigating) current.tripTrace else TripTrace(),
++                selectedRoute = route
+             )
+         }
+     }
+ 
+-    fun clearDestinationCandidate() {
+-        _state.update { it.copy(destinationCandidate = null) }
++    fun appendTracePoint(point: TracePoint) {
++        _state.update { current ->
++            if (current.navigationState !is NavigationState.Navigating) current
++            else current.copy(tripTrace = TripTrace(current.tripTrace.points + point))
++        }
+     }
+ 
+-    fun clearRoute() {
+-        _state.update {
+-            it.copy(
+-                selectedRoute = null,
+-                weatherSummary = null,
+-                trafficSummary = null
+-            )
+-        }
++    fun endTrip() {
++        _state.update { current -> current.copy(navigationState = NavigationState.TripEnded, tripEndedAtMillis = System.currentTimeMillis()) }
+     }
+ 
+-    fun clear() {
+-        _state.value = NavigationSessionState()
++    fun setTripContext(weatherSummary: String?, trafficSummary: String?) {
++        _state.update { it.copy(weatherSummary = weatherSummary, trafficSummary = trafficSummary) }
+     }
++
++    fun clearDestinationCandidate() { _state.update { it.copy(destinationCandidate = null) } }
++    fun clearRoute() { _state.update { it.copy(selectedRoute = null, weatherSummary = null, trafficSummary = null) } }
++    fun clear() { _state.value = NavigationSessionState() }
+ }
+diff -ruN run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt
+--- run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt	2026-08-30 08:36:26.000000000 +0000
++++ run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt	2026-08-30 21:09:33.759009397 +0000
+@@ -109,6 +109,7 @@
+                 locationProvider = locationProvider,
+                 routeRepository = routeRepository,
+                 settingsRepository = settingsRepository,
++                destinationSearchRepository = destinationSearchRepository,
+                 navigationSession = navigationSession
+             )
+         }
+diff -ruN run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+--- run40base/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt	2026-08-30 15:10:23.000000000 +0000
++++ run41src/RahYar-Run40-Source-1.5.6-PRD-Regression-Fix/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt	2026-08-30 21:10:02.351501437 +0000
+@@ -26,8 +26,13 @@
+ import ir.rahyar.app.data.trip.TripStoryRecord
+ import ir.rahyar.app.data.trip.TripStoryStore
+ import ir.rahyar.app.domain.models.LatLng
++import ir.rahyar.app.domain.models.MapViewMode
++import ir.rahyar.app.domain.models.Poi
++import ir.rahyar.app.domain.models.PoiType
+ import ir.rahyar.app.domain.models.Route
++import ir.rahyar.app.domain.models.RouteType
+ import ir.rahyar.app.domain.repository.AppLanguage
++import ir.rahyar.app.domain.repository.DestinationSearchRepository
+ import ir.rahyar.app.domain.repository.RouteRepository
+ import ir.rahyar.app.domain.repository.SettingsRepository
+ import ir.rahyar.app.navigation.NavigationSession
+@@ -53,6 +58,7 @@
+     locationProvider: LocationProvider,
+     routeRepository: RouteRepository,
+     settingsRepository: SettingsRepository,
++    destinationSearchRepository: DestinationSearchRepository,
+     navigationSession: NavigationSession
+ ) {
+     val session by navigationSession.state.collectAsStateWithLifecycle()
+@@ -76,6 +82,7 @@
+         locationProvider = locationProvider,
+         routeRepository = routeRepository,
+         settingsRepository = settingsRepository,
++        destinationSearchRepository = destinationSearchRepository,
+         navigationSession = navigationSession,
+         onStop = {
+             navigationSession.clear()
+@@ -92,6 +99,7 @@
+     locationProvider: LocationProvider,
+     routeRepository: RouteRepository,
+     settingsRepository: SettingsRepository,
++    destinationSearchRepository: DestinationSearchRepository,
+     navigationSession: NavigationSession,
+     onStop: () -> Unit
+ ) {
+@@ -131,15 +139,10 @@
+     var navigationStartFailed by remember { mutableStateOf(false) }
+     var showQuickSettings by remember { mutableStateOf(false) }
+     var showMidRouteServices by remember { mutableStateOf(false) }
+-    var voiceAlertsEnabled by remember { mutableStateOf(true) }
+-    var showTraffic by remember { mutableStateOf(false) }
+-    var avoidTrafficZone by remember { mutableStateOf(false) }
+-    var avoidPollutionZone by remember { mutableStateOf(false) }
+-    var avoidTollRoads by remember { mutableStateOf(false) }
+-    var rerouteHeavyTraffic by remember { mutableStateOf(false) }
+-    var rerouteSevereWeather by remember { mutableStateOf(false) }
+-    var speedLimitAlerts by remember { mutableStateOf(true) }
+-    var mapViewMode by remember { mutableStateOf("HEADING_UP") }
++    val quickSettings = session.quickSettings
++    var poiResults by remember { mutableStateOf<List<Poi>>(emptyList()) }
++    var poiLoading by remember { mutableStateOf(false) }
++    var poiError by remember { mutableStateOf<String?>(null) }
+     var showEndConfirm by remember { mutableStateOf(false) }
+     var showTripStory by remember { mutableStateOf(false) }
+     var tripEndedAtMillis by rem
