@@ -1,0 +1,73 @@
+name: RahYar Run 39 Public Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-run39.yml'
+      - 'ci/source.part*.b64'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct Run 39 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat ci/source.part0.b64 ci/source.part1.b64 ci/source.part2.b64 ci/source.part3.b64 | base64 -d > /tmp/rahyar.tar.zst
+          mkdir -p project
+          tar --zstd -xf /tmp/rahyar.tar.zst -C project
+          test -f project/app/build.gradle.kts
+          grep -q 'versionCode = 17' project/app/build.gradle.kts
+          grep -q 'versionName = "1.5.5-field-test"' project/app/build.gradle.kts
+
+      - name: Supply CI-only Persian-capable font files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p project/app/src/main/res/font
+          FONT="$(fc-match 'DejaVu Sans' -f '%{file}\n' | head -n1)"
+          test -f "$FONT"
+          cp "$FONT" project/app/src/main/res/font/iransans_regular.ttf
+          cp "$FONT" project/app/src/main/res/font/iransans_medium.ttf
+          cp "$FONT" project/app/src/main/res/font/iransans_bold.ttf
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build debug APK
+        working-directory: project
+        env:
+          ORS_API_KEY: ''
+          HERE_API_KEY: ''
+        run: gradle assembleDebug --stacktrace
+
+      - name: Rename APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find project/app/build/outputs/apk/debug -name '*.apk' -type f | head -n1)"
+          test -n "$APK"
+          cp "$APK" RahYar-1.5.5-Run39-Field-Test.apk
+          sha256sum RahYar-1.5.5-Run39-Field-Test.apk > RahYar-1.5.5-Run39-Field-Test.apk.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RahYar-1.5.5-Run39-Field-Test
+          path: |
+            RahYar-1.5.5-Run39-Field-Test.apk
+            RahYar-1.5.5-Run39-Field-Test.apk.sha256
+          if-no-files-found: error
