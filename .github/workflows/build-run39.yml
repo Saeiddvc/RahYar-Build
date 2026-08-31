@@ -49,7 +49,112 @@ jobs:
           patch -p1 < /tmp/run43.diff
           patch -p1 < ../ci/run43.fix1.diff
           patch -p1 < ../ci/run44.diff
-          patch -p1 < ../ci/run44.fix1.diff
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          core = Path("app/src/main/java/ir/rahyar/app/core/navigation/PoiDetour.kt")
+          core.write_text("""package ir.rahyar.app.core.navigation
+
+import ir.rahyar.app.domain.models.Route
+import kotlin.math.roundToInt
+
+data class PoiDetourMetrics(
+    val distanceMeters: Int,
+    val durationMinutes: Int
+)
+
+fun calculatePoiDetour(baseRoute: Route, routeWithStop: Route): PoiDetourMetrics? {
+    if (baseRoute.distanceKm <= 0.0 || baseRoute.durationMinutes <= 0) return null
+    if (routeWithStop.distanceKm <= 0.0 || routeWithStop.durationMinutes <= 0) return null
+    return PoiDetourMetrics(
+        distanceMeters = ((routeWithStop.distanceKm - baseRoute.distanceKm).coerceAtLeast(0.0) * 1000.0).roundToInt(),
+        durationMinutes = (routeWithStop.durationMinutes - baseRoute.durationMinutes).coerceAtLeast(0)
+    )
+}
+""")
+
+          active = Path("app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt")
+          text = active.read_text()
+          old = """                                                    poi.copy(
+                                                        detourDistanceMeters = ((withStop.distanceKm - baseline.distanceKm).coerceAtLeast(0.0) * 1000).roundToInt(),
+                                                        detourDurationMinutes = (withStop.durationMinutes - baseline.durationMinutes).coerceAtLeast(0)
+                                                    )"""
+          new = """                                                    val detour = ir.rahyar.app.core.navigation.calculatePoiDetour(baseline, withStop)
+                                                        ?: return@mapNotNull null
+                                                    poi.copy(
+                                                        detourDistanceMeters = detour.distanceMeters,
+                                                        detourDurationMinutes = detour.durationMinutes
+                                                    )"""
+          if old not in text:
+              raise SystemExit("Run44 detour integration target not found")
+          active.write_text(text.replace(old, new, 1))
+
+          detour_test = Path("app/src/test/java/ir/rahyar/app/core/navigation/PoiDetourTest.kt")
+          detour_test.parent.mkdir(parents=True, exist_ok=True)
+          detour_test.write_text("""package ir.rahyar.app.core.navigation
+
+import ir.rahyar.app.domain.models.LatLng
+import ir.rahyar.app.domain.models.Route
+import ir.rahyar.app.domain.models.RouteType
+import ir.rahyar.app.domain.models.TransportMode
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+import java.time.LocalDateTime
+
+class PoiDetourTest {
+    private fun route(distanceKm: Double, durationMinutes: Int): Route = Route(
+        id = "r-$distanceKm-$durationMinutes",
+        type = RouteType.RECOMMENDED,
+        points = listOf(LatLng(35.83, 50.95), LatLng(35.82, 51.00)),
+        durationMinutes = durationMinutes,
+        distanceKm = distanceKm,
+        eta = LocalDateTime.now(),
+        transportMode = TransportMode.CAR
+    )
+
+    @Test fun realRouteDifferenceProducesDetourDistanceAndDuration() {
+        val detour = calculatePoiDetour(route(7.0, 18), route(8.25, 23))
+        assertEquals(1250, detour?.distanceMeters)
+        assertEquals(5, detour?.durationMinutes)
+    }
+
+    @Test fun unavailableBaseRouteNeverProducesFakeZeroDetour() {
+        assertNull(calculatePoiDetour(route(0.0, 0), route(8.25, 23)))
+    }
+
+    @Test fun unavailableStopRouteNeverProducesFakeZeroDetour() {
+        assertNull(calculatePoiDetour(route(7.0, 18), route(0.0, 0)))
+    }
+}
+""")
+
+          waypoint_test = Path("app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt")
+          wt = waypoint_test.read_text()
+          extra = """
+    @Test fun arrivingAtStopThenSelectingContinuationRouteKeepsFinalDestinationAndSessionAlive() {
+        val session = NavigationSession()
+        val destination = LatLng(35.82, 51.00)
+        session.setOrigin(LatLng(35.83, 50.95))
+        session.setDestination(destination)
+        session.addStop(LatLng(35.825, 50.98), "fuel-1")
+        session.beginNavigation(route("to-stop"))
+        session.updateStopStatus("fuel-1", StopStatus.ARRIVED)
+        session.selectRoute(route("continue-to-destination"))
+        val state = session.state.value
+        assertEquals(destination, state.destination)
+        assertEquals(destination, state.itinerary?.destination)
+        assertEquals(StopStatus.ARRIVED, state.itinerary?.stops?.single()?.status)
+        assertTrue(state.navigationState is NavigationState.Navigating)
+    }
+"""
+          if "arrivingAtStopThenSelectingContinuationRouteKeepsFinalDestinationAndSessionAlive" not in wt:
+              pos = wt.rfind("}")
+              if pos < 0:
+                  raise SystemExit("Waypoint test class closing brace not found")
+              waypoint_test.write_text(wt[:pos] + extra + wt[pos:])
+          PY
 
           sed -i 's/versionCode = 21/versionCode = 22/' app/build.gradle.kts
           sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.0-run44-poi-stops"/' app/build.gradle.kts
