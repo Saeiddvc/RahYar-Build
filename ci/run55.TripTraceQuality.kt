@@ -34,7 +34,7 @@ fun shouldAcceptTracePoint(previous: TracePoint?, candidate: TracePoint): Boolea
 
     val uncertaintyFloor = maxOf(
         MIN_STATIONARY_MOVEMENT_METERS,
-        ((previous.accuracyMeters ?: 0f) + (candidate.accuracyMeters ?: 0f)) * 0.12f
+        (((previous.accuracyMeters ?: 0f) + (candidate.accuracyMeters ?: 0f)) * 0.12f).toDouble()
     )
     if (
         distance < uncertaintyFloor &&
