@@ -18,7 +18,7 @@ jobs:
     name: Run56 Compile + Unit Tests
     runs-on: ubuntu-latest
     env:
-      HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
+      HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -686,7 +686,7 @@ jobs:
         working-directory: project
         env:
           ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
-          HERE_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
+          HERE_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
         run: gradle testDebugUnitTest assembleDebug --stacktrace
 
       - name: Upload Run55 APK candidate
@@ -699,7 +699,7 @@ jobs:
 
       - name: Require HERE Traffic credential for release
         env:
-          HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
+          HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
@@ -710,7 +710,7 @@ jobs:
 
       - name: Live HERE Traffic authenticated smoke
         env:
-          HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
+          HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
