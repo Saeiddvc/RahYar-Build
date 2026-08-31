@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "No verified automated evidence yet.",
-  "timestamp": "2026-08-31T07:43:02+03:30"
+  "pass": true,
+  "details": "Run49 CI 33365704532 passed severeOffRouteReroutesOnFirstConfirmedFix and highwayOffRouteReroutesOnFirstConfirmedFix. NavigationEngine uses offRouteConfirmationsRequired, so severe/high-speed off-route decisions trigger reroute on the first confirmed fix.",
+  "timestamp": "2026-08-31T06:52:00Z"
 }
