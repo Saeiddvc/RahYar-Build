@@ -1,0 +1,29 @@
+
+diff -ruN Run43Source/app/src/test/java/ir/rahyar/app/core/navigation/DriverAlertEvaluatorTest.kt Run43Fixed/app/src/test/java/ir/rahyar/app/core/navigation/DriverAlertEvaluatorTest.kt
+--- Run43Source/app/src/test/java/ir/rahyar/app/core/navigation/DriverAlertEvaluatorTest.kt	2026-08-31 04:31:37.735917266 +0000
++++ Run43Fixed/app/src/test/java/ir/rahyar/app/core/navigation/DriverAlertEvaluatorTest.kt	2026-08-31 05:10:00.000000000 +0000
+@@ -42,3 +42,23 @@
+         assertEquals(DriverAlertKind.OFF_ROUTE, alert?.kind)
+     }
++
++    @Test
++    fun nearbyBumpTriggersWarning() {
++        val event = RoadEvent("bump", RoadEventType.SPEED_BUMP, LatLng(35.7, 51.4), "سرعت‌گیر", 120)
++        val alert = evaluateDriverAlert(50.0, null, listOf(event), false)
++        assertEquals(DriverAlertKind.SPEED_BUMP, alert?.kind)
++    }
++
++    @Test
++    fun nearbyHazardTriggersWarning() {
++        val event = RoadEvent("hazard", RoadEventType.HAZARD, LatLng(35.7, 51.4), "خطر جاده", 250)
++        val alert = evaluateDriverAlert(70.0, null, listOf(event), false)
++        assertEquals(DriverAlertKind.HAZARD, alert?.kind)
++    }
++
++    @Test
++    fun offRouteAlertOverridesOverspeedAndRoadEvent() {
++        val event = RoadEvent("cam", RoadEventType.SPEED_CAMERA, LatLng(35.7, 51.4), "دوربین", 80)
++        val alert = evaluateDriverAlert(120.0, 80, listOf(event), true)
++        assertEquals(DriverAlertKind.OFF_ROUTE, alert?.kind)
++    }
+ }
