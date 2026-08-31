@@ -1,5 +1,5 @@
 {
   "pass": true,
-  "details": "Run49 CI 33365704532 passed heading camera/look-ahead tests and source contracts. Camera target derives from active.currentLocation + fused bearing and forwardPoint, not destination coordinates.",
-  "timestamp": "2026-08-31T06:52:00Z"
+  "details": "Run49 CI 33365704532 passed heading camera/look-ahead tests and source contracts. Camera target derives from active.currentLocation, fused bearing, and forwardPoint rather than destination coordinates.",
+  "timestamp": "2026-08-31T06:54:00Z"
 }
