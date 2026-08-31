@@ -1,5 +1,5 @@
 {
-  "pass": true,
-  "details": "Run52 CI 33375884732 passed noTripMeansNoStoryPayload and onlyRealTripTraceCanBuildStory. Empty or single-point TripTrace returns no TripStoryRuntimeData and the UI shows the mandatory no-real-trip-data message.",
-  "timestamp": "2026-08-31T09:09:00Z"
+  "pass": false,
+  "details": "FIELD REJECTED 2026-08-31: Trip Story was generated for a near-zero-distance/one-minute trace with visible GPS-jitter geometry while the UI reported 0 km actual distance. A mere multi-point trace is not sufficient evidence of a real trip; meaningful movement and trace-quality gating are required.",
+  "timestamp": "2026-08-31T22:30:00+03:30"
 }
