@@ -15,7 +15,7 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Run44 Compile + Unit Tests
+    name: Run45 Compile + Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -313,10 +313,12 @@ jobs:
               waypoint_test.write_text(wt[:pos] + extra + wt[pos:])
           PY
 
-          sed -i 's/versionCode = 21/versionCode = 22/' app/build.gradle.kts
-          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.0-run44-poi-stops"/' app/build.gradle.kts
-          grep -q 'versionCode = 22' app/build.gradle.kts
-          grep -q 'versionName = "1.6.0-run44-poi-stops"' app/build.gradle.kts
+          python3 ../ci/run45.weather.py
+
+          sed -i 's/versionCode = 21/versionCode = 23/' app/build.gradle.kts
+          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.1-run45-weather"/' app/build.gradle.kts
+          grep -q 'versionCode = 23' app/build.gradle.kts
+          grep -q 'versionName = "1.6.1-run45-weather"' app/build.gradle.kts
 
       - name: GPS core source contract checks
         working-directory: project
@@ -368,6 +370,32 @@ jobs:
           grep -q 'routeSegmentPolylines' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
           grep -q 'segmentColors' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
           grep -q 'twoPendingStopsProduceThreeIndependentSegments' app/src/test/java/ir/rahyar/app/core/navigation/RouteSegmentPlannerTest.kt
+
+      - name: Weather awareness source contract checks
+        working-directory: project
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'OpenMeteoWeatherApi' app/src/main/java/ir/rahyar/app/data/remote/WeatherApi.kt
+          grep -q 'RouteWeatherSnapshot' app/src/main/java/ir/rahyar/app/domain/models/Weather.kt
+          grep -q 'classifyWeatherHazards' app/src/main/java/ir/rahyar/app/core/weather/WeatherHazards.kt
+          grep -q 'WeatherHazard.RAIN' app/src/main/java/ir/rahyar/app/core/weather/WeatherHazards.kt
+          grep -q 'WeatherHazard.SNOW' app/src/main/java/ir/rahyar/app/core/weather/WeatherHazards.kt
+          grep -q 'WeatherHazard.FOG' app/src/main/java/ir/rahyar/app/core/weather/WeatherHazards.kt
+          grep -q 'liveWeather' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'rahyar-weather-alert' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'timelinePreservesLiveRouteSnapshots' app/src/test/java/ir/rahyar/app/core/weather/WeatherHazardsTest.kt
+
+      - name: Live Open-Meteo smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 2 --max-time 35             'https://api.open-meteo.com/v1/forecast?latitude=35.8327&longitude=50.9916&current=temperature_2m,weather_code,precipitation,wind_speed_10m&timezone=auto'             > /tmp/open-meteo.json
+          jq -e '.current.temperature_2m != null' /tmp/open-meteo.json >/dev/null
+          jq -e '.current.weather_code != null' /tmp/open-meteo.json >/dev/null
+          jq -e '.current.precipitation != null' /tmp/open-meteo.json >/dev/null
+          jq -e '.current.wind_speed_10m != null' /tmp/open-meteo.json >/dev/null
+          echo "Open-Meteo live weather provider returned current data."
 
       - name: Live speed-limit provider smoke
         shell: bash
