@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run48 CI 33365317648 passed tripStoryBuilderAcceptsTripTraceNotRoute and ActiveNavigation source checks. buildTripStoryPayload has a single TripTrace parameter and TripStorySheet no longer accepts Route.",
+  "timestamp": "2026-08-31T06:46:00Z"
+}
