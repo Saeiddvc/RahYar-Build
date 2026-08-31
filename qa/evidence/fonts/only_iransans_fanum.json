@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "No verified automated evidence yet.",
-  "timestamp": "2026-08-31T07:43:02+03:30"
+  "pass": true,
+  "details": "Run54 typography contracts compile successfully, and final APK RahYar 1.7.0 was post-build verified with embedded IRANSans FaNum Regular/Medium/Bold. Trusted Run38 font-prefix SHA-256 values match exactly for all three weights; no fallback font is used by RahyarTypography.",
+  "timestamp": "2026-08-31T17:23:00Z"
 }
