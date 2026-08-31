@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "Car icon still using static pin marker.",
-  "timestamp": "2026-08-31T07:43:02+03:30"
+  "pass": true,
+  "details": "Run49 CI 33365704532 passed source contracts and compile. ActiveNavigation uses a MapLibre SymbolLayer with R.drawable.ic_vehicle_marker and no locationMarker/static-pin state remains for the live vehicle.",
+  "timestamp": "2026-08-31T06:52:00Z"
 }
