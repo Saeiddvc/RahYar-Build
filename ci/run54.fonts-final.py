@@ -1,10 +1,9 @@
 from pathlib import Path
 
 root = Path(".")
-typography = root / "app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt"
-typography.write_text("""package ir.rahyar.app.ui.theme
+font_file = root / "app/src/main/java/ir/rahyar/app/ui/theme/Font.kt"
+font_file.write_text("""package ir.rahyar.app.ui.theme
 
-import androidx.compose.material3.Typography
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -15,6 +14,12 @@ val IranSansFaNum = FontFamily(
     Font(R.font.iransans_fanum_medium, FontWeight.Medium),
     Font(R.font.iransans_fanum_bold, FontWeight.Bold)
 )
+""")
+
+typography = root / "app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt"
+typography.write_text("""package ir.rahyar.app.ui.theme
+
+import androidx.compose.material3.Typography
 
 private val BaseTypography = Typography()
 
