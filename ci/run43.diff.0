@@ -1,0 +1,141 @@
+diff -ruN Run42Base/app/build.gradle.kts Run43Source/app/build.gradle.kts
+--- Run42Base/app/build.gradle.kts	2026-08-31 04:19:36.573378458 +0000
++++ Run43Source/app/build.gradle.kts	2026-08-31 04:31:37.402542565 +0000
+@@ -16,8 +16,8 @@
+         applicationId = "ir.rahyar.app"
+         minSdk = 24
+         targetSdk = 34
+-        versionCode = 20
+-        versionName = "1.5.8-run42-gps-core"
++        versionCode = 21
++        versionName = "1.5.9-run43-road-awareness"
+         buildConfigField("String", "ORS_API_KEY", "\"\${orsApiKey.escapeBuildConfig()}\"")
+         buildConfigField("String", "HERE_API_KEY", "\"\${hereApiKey.escapeBuildConfig()}\"")
+     }
+diff -ruN Run42Base/app/src/main/java/ir/rahyar/app/core/navigation/DriverAlertEvaluator.kt Run43Source/app/src/main/java/ir/rahyar/app/core/navigation/DriverAlertEvaluator.kt
+--- Run42Base/app/src/main/java/ir/rahyar/app/core/navigation/DriverAlertEvaluator.kt	1970-01-01 00:00:00.000000000 +0000
++++ Run43Source/app/src/main/java/ir/rahyar/app/core/navigation/DriverAlertEvaluator.kt	2026-08-31 04:30:48.599495381 +0000
+@@ -0,0 +1,70 @@
++package ir.rahyar.app.core.navigation
++
++import ir.rahyar.app.domain.models.DriverAlert
++import ir.rahyar.app.domain.models.DriverAlertKind
++import ir.rahyar.app.domain.models.RoadEvent
++import ir.rahyar.app.domain.models.RoadEventType
++import kotlin.math.max
++
++fun evaluateDriverAlert(
++    speedKmh: Double,
++    speedLimitKmh: Int?,
++    roadEvents: List<RoadEvent>,
++    isOffRoute: Boolean
++): DriverAlert? {
++    if (isOffRoute) {
++        return DriverAlert(
++            kind = DriverAlertKind.OFF_ROUTE,
++            message = "از مسیر خارج شدید",
++            priority = 100
++        )
++    }
++
++    val candidates = mutableListOf<DriverAlert>()
++
++    roadEvents.firstOrNull { event ->
++        val warningDistance = eventWarningDistanceMeters(event.type, speedKmh)
++        event.distanceAheadMeters in 0..warningDistance
++    }?.let { event ->
++        val kind = when (event.type) {
++            RoadEventType.SPEED_CAMERA -> DriverAlertKind.SPEED_CAMERA
++            RoadEventType.SPEED_BUMP -> DriverAlertKind.SPEED_BUMP
++            RoadEventType.HAZARD -> DriverAlertKind.HAZARD
++        }
++        val message = when (event.type) {
++            RoadEventType.SPEED_CAMERA -> "دوربین کنترل سرعت در ${event.distanceAheadMeters} متر"
++            RoadEventType.SPEED_BUMP -> "سرعت‌گیر در ${event.distanceAheadMeters} متر"
++            RoadEventType.HAZARD -> "${event.title} در ${event.distanceAheadMeters} متر"
++        }
++        val priority = when (event.type) {
++            RoadEventType.SPEED_CAMERA -> 90
++            RoadEventType.SPEED_BUMP -> 88
++            RoadEventType.HAZARD -> 82
++        }
++        candidates += DriverAlert(kind, message, event.distanceAheadMeters, priority)
++    }
++
++    if (speedLimitKmh != null && speedLimitKmh > 0) {
++        val overspeedMargin = max(3.0, speedLimitKmh * 0.05)
++        when {
++            speedKmh > speedLimitKmh + overspeedMargin -> candidates += DriverAlert(
++                kind = DriverAlertKind.OVERSPEED,
++                message = "سرعت مجاز ${speedLimitKmh}؛ سرعت را کاهش دهید",
++                priority = 95
++            )
++            speedKmh >= speedLimitKmh * 0.90 -> candidates += DriverAlert(
++                kind = DriverAlertKind.APPROACHING_SPEED_LIMIT,
++                message = "نزدیک سرعت مجاز ${speedLimitKmh} هستید",
++                priority = 60
++            )
++        }
++    }
++
++    return candidates.maxByOrNull { it.priority }
++}
++
++fun eventWarningDistanceMeters(type: RoadEventType, speedKmh: Double): Int = when (type) {
++    RoadEventType.SPEED_CAMERA -> max(450.0, speedKmh * 8.0).coerceAtMost(1_000.0).toInt()
++    RoadEventType.SPEED_BUMP -> max(180.0, speedKmh * 3.2).coerceAtMost(450.0).toInt()
++    RoadEventType.HAZARD -> max(350.0, speedKmh * 6.0).coerceAtMost(900.0).toInt()
++}
+diff -ruN Run42Base/app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt Run43Source/app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt
+--- Run42Base/app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt	2026-08-31 04:20:15.847725705 +0000
++++ Run43Source/app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt	2026-08-31 04:31:19.272073358 +0000
+@@ -8,7 +8,11 @@
+ import ir.rahyar.app.domain.models.LatLng
+ import ir.rahyar.app.domain.models.Route
+ import ir.rahyar.app.domain.models.RouteType
++import ir.rahyar.app.domain.models.DriverAlert
++import ir.rahyar.app.domain.models.RoadAwarenessSnapshot
++import ir.rahyar.app.domain.models.RoadEvent
+ import ir.rahyar.app.domain.repository.RouteRepository
++import ir.rahyar.app.domain.repository.RoadAwarenessRepository
+ import ir.rahyar.app.navigation.NavigationSession
+ import ir.rahyar.app.navigation.TracePoint
+ import kotlinx.coroutines.CancellationException
+@@ -48,6 +52,9 @@
+         val isRecalculating: Boolean = false,
+         val isOffRoute: Boolean = false,
+         val snappedToRoute: Boolean = false,
++        val speedLimitKmh: Int? = null,
++        val roadEvents: List<RoadEvent> = emptyList(),
++        val driverAlert: DriverAlert? = null,
+         val message: String? = null
+     ) : NavigationHudState
+ }
+@@ -56,6 +63,7 @@
+     context: Context,
+     private val locationProvider: LocationProvider,
+     private val routeRepository: RouteRepository,
++    private val roadAwarenessRepository: RoadAwarenessRepository,
+     private val session: NavigationSession
+ ) {
+     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+@@ -70,6 +78,10 @@
+     private var lastReliableBearing = 0f
+     private var rerouteCount = 0
+     private val signalFusion = NavigationSignalFusion()
++    private var roadAwareness = RoadAwarenessSnapshot()
++    private var roadRefreshJob: Job? = null
++    private var lastRoadRefreshMillis = 0L
++    private var lastRoadRefreshLocation: LatLng? = null
+ 
+     private val _hudState = MutableStateFlow<NavigationHudState>(NavigationHudState.Idle)
+     val hudState: StateFlow<NavigationHudState> = _hudState.asStateFlow()
+@@ -81,6 +93,9 @@
+         offRouteCount = 0
+         rerouteCount = 0
+         signalFusion.reset()
++        roadAwareness = RoadAwarenessSnapshot()
++        lastRoadRefreshMillis = 0L
++        lastRoadRefreshLocation = null
+         if (!wakeLock.isHeld) {
+             runCatching { wakeLock.acquir
