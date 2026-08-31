@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "No verified automated evidence yet.",
-  "timestamp": "2026-08-31T07:43:02+03:30"
+  "pass": true,
+  "details": "Run54 CI 33418655742 passed decimalSeparatorIsPersian: 1913.1 formats as ۱۹۱۳٫۱ and contains no Latin decimal point.",
+  "timestamp": "2026-08-31T17:23:00Z"
 }
