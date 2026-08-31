@@ -1,0 +1,152 @@
+Meters > threshold && (!headingReliable || headingMismatch)
+-
+-        if (clearlyOffRoute || probableOffRoute) offRouteCount++ else offRouteCount = 0
+-        val requiredConfirmations = if (speedMps > 20f) 2 else 3
++        speedMps: Double
++    ): Boolean {
++        if (rerouteJob?.isActive == true) return true
++        if (!decision.candidate) {
++            offRouteCount = 0
++            return false
++        }
+ 
+-        if (offRouteCount >= requiredConfirmations) {
++        offRouteCount++
++        val confirmationsRequired = if (decision.severe || speedMps >= 15.0) 1 else 2
++        if (offRouteCount >= confirmationsRequired) {
+             offRouteCount = 0
+             rerouteJob = scope.launch { reroute(currentLocation, destination) }
+         }
++        return true
+     }
+ 
+     private suspend fun reroute(origin: LatLng, destination: LatLng) {
+diff -ruN Run41Baseline/app/src/main/java/ir/rahyar/app/core/navigation/NavigationSignalFusion.kt Run41Source/project/app/src/main/java/ir/rahyar/app/core/navigation/NavigationSignalFusion.kt
+--- Run41Baseline/app/src/main/java/ir/rahyar/app/core/navigation/NavigationSignalFusion.kt	1970-01-01 00:00:00.000000000 +0000
++++ Run41Source/project/app/src/main/java/ir/rahyar/app/core/navigation/NavigationSignalFusion.kt	2026-08-31 04:19:35.145848723 +0000
+@@ -0,0 +1,189 @@
++package ir.rahyar.app.core.navigation
++
++import ir.rahyar.app.domain.models.LatLng
++import kotlin.math.abs
++import kotlin.math.atan2
++import kotlin.math.cos
++import kotlin.math.exp
++import kotlin.math.max
++import kotlin.math.sin
++import kotlin.math.sqrt
++
++/**
++ * Pure navigation signal fusion used before map rendering/HUD updates.
++ * It combines reported GNSS/Fused speed with displacement speed, rejects stale fixes,
++ * and produces a low-latency bearing fallback from motion when device bearing is weak.
++ */
++data class NavigationSignalSample(
++    val location: LatLng,
++    val timestampMillis: Long,
++    val speedMps: Double?,
++    val speedAccuracyMps: Double?,
++    val bearingDegrees: Float?,
++    val bearingAccuracyDegrees: Float?,
++    val horizontalAccuracyMeters: Double
++)
++
++data class NavigationSignalFix(
++    val speedMps: Double,
++    val bearingDegrees: Float,
++    val usedReportedSpeed: Boolean,
++    val usedReportedBearing: Boolean
++)
++
++class NavigationSignalFusion(
++    private val maxFixAgeMillis: Long = 4_000L
++) {
++    private var previous: NavigationSignalSample? = null
++    private var smoothedSpeedMps: Double? = null
++    private var lastBearingDegrees: Float = 0f
++
++    fun reset() {
++        previous = null
++        smoothedSpeedMps = null
++        lastBearingDegrees = 0f
++    }
++
++    fun fuse(sample: NavigationSignalSample, nowMillis: Long = System.currentTimeMillis()): NavigationSignalFix? {
++        if (sample.horizontalAccuracyMeters <= 0.0 || sample.horizontalAccuracyMeters > 80.0) return null
++        if (nowMillis - sample.timestampMillis > maxFixAgeMillis) return null
++
++        val previousSample = previous
++        val dtSeconds = previousSample?.let { (sample.timestampMillis - it.timestampMillis) / 1000.0 }
++            ?.takeIf { it in 0.25..5.0 }
++        val displacementSpeed = if (previousSample != null && dtSeconds != null) {
++            val meters = distanceMeters(previousSample.location, sample.location)
++            val derived = meters / dtSeconds
++            derived.takeIf { it in 0.0..75.0 }
++        } else null
++
++        val reportedSpeedReliable = sample.speedMps != null && sample.speedMps >= 0.0 &&
++            (sample.speedAccuracyMps == null || sample.speedAccuracyMps <= 2.0)
++
++        val rawSpeed = when {
++            reportedSpeedReliable && displacementSpeed != null -> 0.72 * sample.speedMps!! + 0.28 * displacementSpeed
++            reportedSpeedReliable -> sample.speedMps!!
++            displacementSpeed != null -> displacementSpeed
++            sample.speedMps != null && sample.speedMps >= 0.0 -> sample.speedMps
++            else -> 0.0
++        }.coerceIn(0.0, 75.0)
++
++        val previousSmoothed = smoothedSpeedMps
++        val alpha = if (previousSmoothed == null) 1.0 else {
++            val dt = dtSeconds ?: 1.0
++            (1.0 - exp(-dt / 0.55)).coerceIn(0.58, 0.92)
++        }
++        val fusedSpeed = if (previousSmoothed == null) rawSpeed else previousSmoothed + alpha * (rawSpeed - previousSmoothed)
++        smoothedSpeedMps = fusedSpeed
++
++        val reportedBearingReliable = sample.bearingDegrees != null && fusedSpeed >= 2.0 &&
++            (sample.bearingAccuracyDegrees == null || sample.bearingAccuracyDegrees <= 25f)
++        val motionBearing = if (previousSample != null && dtSeconds != null && distanceMeters(previousSample.location, sample.location) >= 2.0) {
++            bearingDegrees(previousSample.location, sample.location)
++        } else null
++
++        val targetBearing = when {
++            reportedBearingReliable -> sample.bearingDegrees!!
++            motionBearing != null && fusedSpeed >= 1.5 -> motionBearing
++            else -> lastBearingDegrees
++        }
++        lastBearingDegrees = interpolateBearing(lastBearingDegrees, targetBearing, if (fusedSpeed > 8.0) 0.78f else 0.62f)
++        previous = sample
++
++        return NavigationSignalFix(
++            speedMps = fusedSpeed,
++            bearingDegrees = lastBearingDegrees,
++            usedReportedSpeed = reportedSpeedReliable,
++            usedReportedBearing = reportedBearingReliable
++        )
++    }
++}
++
++data class OffRouteDecision(
++    val candidate: Boolean,
++    val severe: Boolean,
++    val thresholdMeters: Double
++)
++
++fun evaluateOffRoute(
++    distanceFromRouteMeters: Double,
++    horizontalAccuracyMeters: Double,
++    speedMps: Double,
++    headingDifferenceDegrees: Float?
++): OffRouteDecision {
++    val accuracy = horizontalAccuracyMeters.coerceIn(3.0, 50.0)
++    val speedAllowance = when {
++        speedMps >= 25.0 -> 16.0
++        speedMps >= 15.0 -> 12.0
++        speedMps >= 5.0 -> 7.0
++        else -> 3.0
++    }
++    val threshold = max(18.0, accuracy * 1.35 + speedAllowance)
++    val severeThreshold = max(48.0, accuracy * 2.25 + speedAllowance)
++    val headingMismatch = headingDifferenceDegrees != null && headingDifferenceDegrees > 52f
++    val candidate = distanceFromRouteMeters > threshold && (headingDifferenceDegrees == null || headingMismatch || distanceFromRouteMeters > threshold * 1.35)
++    return OffRouteDecision(candidate = candidate, severe = distanceFromRouteMeters > severeThreshold,
