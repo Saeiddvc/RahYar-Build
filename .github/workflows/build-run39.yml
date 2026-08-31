@@ -578,7 +578,7 @@ jobs:
           echo "Authenticated ORS route succeeded."
 
       - name: Live HERE Traffic authenticated smoke
-        if: ${{ env.HERE_API_KEY != '' }}
+        if: ${{ env.HERE_TRAFFIC_API_KEY != '' }}
         env:
           HERE_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
           HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
@@ -670,7 +670,7 @@ jobs:
         working-directory: project
         env:
           ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
-          HERE_API_KEY: ${{ secrets.HERE_API_KEY }}
+          HERE_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
         run: gradle testDebugUnitTest assembleDebug --stacktrace
 
       - name: Upload Run54 APK candidate
