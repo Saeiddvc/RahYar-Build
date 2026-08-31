@@ -470,8 +470,10 @@ jobs:
           ! grep -q 'fun buildTripStoryPayload.*Route' app/src/main/java/ir/rahyar/app/core/navigation/JourneySeparation.kt
           grep -q 'rerouteChangesRouteWithoutResettingSessionOrTrace' app/src/test/java/ir/rahyar/app/core/navigation/JourneySeparationTest.kt
           grep -q 'storyPayloadCopiesTraceListAndDoesNotShareMutableList' app/src/test/java/ir/rahyar/app/core/navigation/JourneySeparationTest.kt
-          grep -q 'val storyPayload = buildTripStoryPayload(session.tripTrace)' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
-          ! grep -A4 'private fun TripStorySheet(' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt | grep -q 'route: Route'
+          grep -q 'completedTripStory = tripStoryRecorder.build' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'trace = session.tripTrace' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          ! grep -A8 'private fun TripStorySheet(' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt | grep -q 'route: Route'
+          ! grep -A120 'if (showTripStory)' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt | grep -q 'initialRoute'
 
       - name: Provider manager source contract checks
         working-directory: project
