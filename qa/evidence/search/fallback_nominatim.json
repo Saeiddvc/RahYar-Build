@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run46 CI 33363486057 passed live Photon and Nominatim smoke. Photon is primary and Nominatim is queried when the primary result set is insufficient.",
+  "timestamp": "2026-08-31T06:17:00Z"
+}
