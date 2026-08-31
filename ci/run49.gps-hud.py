@@ -119,17 +119,19 @@ e = e.replace(
     "        val remainingMinutes = estimateRemainingMinutes(route.durationMinutes, route.distanceKm, remainingKm)",
     1
 )
-e = e.replace(
-    """        val nextTurn = maneuver?.instruction
+old_turn = """        val nextTurn = maneuver?.instruction
             ?: route.steps.firstOrNull()?.instruction
-            ?: "ادامه مسیر"""",
-    """        val nextTurn = naturalPersianManeuver(
+            ?: "ادامه مسیر"
+"""
+new_turn = """        val nextTurn = naturalPersianManeuver(
             maneuver?.instruction
                 ?: route.steps.firstOrNull()?.instruction
                 ?: "ادامه مسیر"
-        )""",
-    1
-)
+        )
+"""
+if old_turn not in e:
+    raise SystemExit("Run49 nextTurn target missing")
+e = e.replace(old_turn, new_turn, 1)
 e = e.replace(
     "            speedKmh = signal.speedMps * 3.6,",
     "            speedKmh = displaySpeedKmh(signal.speedMps),",
