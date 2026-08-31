@@ -15,7 +15,7 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Run55 Compile + Unit Tests
+    name: Run56 Compile + Unit Tests
     runs-on: ubuntu-latest
     env:
       HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
@@ -326,11 +326,22 @@ jobs:
           python3 ../ci/run53.home-required.py
           python3 ../ci/run54.fonts-final.py
           python3 ../ci/run55.field-quality.py
+          python3 ../ci/run56.field-regression.py
 
-          sed -i 's/versionCode = 21/versionCode = 33/' app/build.gradle.kts
-          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.7.1-run55-field-quality"/' app/build.gradle.kts
-          grep -q 'versionCode = 33' app/build.gradle.kts
-          grep -q 'versionName = "1.7.1-run55-field-quality"' app/build.gradle.kts
+          sed -i 's/versionCode = 21/versionCode = 34/' app/build.gradle.kts
+          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.7.2-run56-final-regression"/' app/build.gradle.kts
+          grep -q 'versionCode = 34' app/build.gradle.kts
+          grep -q 'versionName = "1.7.2-run56-final-regression"' app/build.gradle.kts
+
+      - name: Final field-regression source checks
+        working-directory: project
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'navigationVehicleGlyphSpec()' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'liveMarkerGlyphIsUnambiguouslyCarShapedNotPinShaped' app/src/test/java/ir/rahyar/app/core/navigation/VehicleGlyphSpecTest.kt
+          grep -q 'zeroDistanceOneMinuteGpsJitterCannotBuildStory' app/src/test/java/ir/rahyar/app/core/navigation/TripStoryRuntimeTest.kt
+          grep -q 'lowSpeedGpsJitterDoesNotBecomeRealTrip' app/src/test/java/ir/rahyar/app/core/navigation/TripTraceQualityTest.kt
 
       - name: Field quality regression checks
         working-directory: project
@@ -681,7 +692,7 @@ jobs:
       - name: Upload Run55 APK candidate
         uses: actions/upload-artifact@v4
         with:
-          name: RahYar-1.7.1-Run55-APK-Candidate
+          name: RahYar-1.7.2-Run56-APK-Candidate
           path: project/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
