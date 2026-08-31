@@ -79,3 +79,22 @@ class QuickSettingsContractTest {
     }
 }
 """)
+
+font_family_xml = root / "app/src/main/res/font/iransans.xml"
+font_family_xml.parent.mkdir(parents=True, exist_ok=True)
+font_family_xml.write_text("""<?xml version="1.0" encoding="utf-8"?>
+<font-family xmlns:app="http://schemas.android.com/apk/res-auto">
+    <font
+        app:font="@font/iransans_fanum_regular"
+        app:fontStyle="normal"
+        app:fontWeight="400" />
+    <font
+        app:font="@font/iransans_fanum_medium"
+        app:fontStyle="normal"
+        app:fontWeight="500" />
+    <font
+        app:font="@font/iransans_fanum_bold"
+        app:fontStyle="normal"
+        app:fontWeight="700" />
+</font-family>
+""")
