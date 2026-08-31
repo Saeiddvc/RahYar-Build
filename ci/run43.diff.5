@@ -1,0 +1,72 @@
+s/android" android:width="40dp" android:height="40dp" android:viewportWidth="40" android:viewportHeight="40">
++    <path android:fillColor="#FFFFFF" android:pathData="M20,1C9.5,1 1,9.5 1,20s8.5,19 19,19 19,-8.5 19,-19S30.5,1 20,1z"/>
++    <path android:fillColor="#D97706" android:pathData="M20,6L36,33H4z"/>
++    <path android:fillColor="#FFFFFF" android:pathData="M18,14h4v11h-4zM18,28h4v4h-4z"/>
++</vector>
+diff -ruN Run42Base/app/src/main/res/drawable/ic_speed_bump.xml Run43Source/app/src/main/res/drawable/ic_speed_bump.xml
+--- Run42Base/app/src/main/res/drawable/ic_speed_bump.xml	1970-01-01 00:00:00.000000000 +0000
++++ Run43Source/app/src/main/res/drawable/ic_speed_bump.xml	2026-08-31 04:31:37.719917018 +0000
+@@ -0,0 +1,5 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="40dp" android:height="40dp" android:viewportWidth="40" android:viewportHeight="40">
++    <path android:fillColor="#FFFFFF" android:pathData="M20,1C9.5,1 1,9.5 1,20s8.5,19 19,19 19,-8.5 19,-19S30.5,1 20,1z"/>
++    <path android:fillColor="#F59E0B" android:pathData="M5,29h30v5H5z"/>
++    <path android:fillColor="#111827" android:pathData="M8,29c3,-10 6,-13 12,-13s9,3 12,13z"/>
++</vector>
+diff -ruN Run42Base/app/src/main/res/drawable/ic_speed_camera.xml Run43Source/app/src/main/res/drawable/ic_speed_camera.xml
+--- Run42Base/app/src/main/res/drawable/ic_speed_camera.xml	1970-01-01 00:00:00.000000000 +0000
++++ Run43Source/app/src/main/res/drawable/ic_speed_camera.xml	2026-08-31 04:31:37.711916895 +0000
+@@ -0,0 +1,6 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="40dp" android:height="40dp" android:viewportWidth="40" android:viewportHeight="40">
++    <path android:fillColor="#FFFFFF" android:pathData="M20,1C9.5,1 1,9.5 1,20s8.5,19 19,19 19,-8.5 19,-19S30.5,1 20,1z"/>
++    <path android:fillColor="#B00020" android:pathData="M8,10h24v20H8z"/>
++    <path android:fillColor="#FFFFFF" android:pathData="M12,14h8l2,3h6v9H12z"/>
++    <path android:fillColor="#B00020" android:pathData="M20,18a4,4 0,1 0,0 8a4,4 0,1 0,0 -8"/>
++</vector>
+diff -ruN Run42Base/app/src/test/java/ir/rahyar/app/core/navigation/DriverAlertEvaluatorTest.kt Run43Source/app/src/test/java/ir/rahyar/app/core/navigation/DriverAlertEvaluatorTest.kt
+--- Run42Base/app/src/test/java/ir/rahyar/app/core/navigation/DriverAlertEvaluatorTest.kt	1970-01-01 00:00:00.000000000 +0000
++++ Run43Source/app/src/test/java/ir/rahyar/app/core/navigation/DriverAlertEvaluatorTest.kt	2026-08-31 04:31:37.735917266 +0000
+@@ -0,0 +1,44 @@
++package ir.rahyar.app.core.navigation
++
++import ir.rahyar.app.domain.models.DriverAlertKind
++import ir.rahyar.app.domain.models.LatLng
++import ir.rahyar.app.domain.models.RoadEvent
++import ir.rahyar.app.domain.models.RoadEventType
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Test
++
++class DriverAlertEvaluatorTest {
++    @Test
++    fun overspeedBeatsApproachingWarning() {
++        val alert = evaluateDriverAlert(86.0, 80, emptyList(), false)
++        assertEquals(DriverAlertKind.OVERSPEED, alert?.kind)
++    }
++
++    @Test
++    fun approachingLimitWarnsBeforeCrossing() {
++        val alert = evaluateDriverAlert(73.0, 80, emptyList(), false)
++        assertEquals(DriverAlertKind.APPROACHING_SPEED_LIMIT, alert?.kind)
++    }
++
++    @Test
++    fun speedCameraAheadTriggersAtRoadSpeed() {
++        val event = RoadEvent("cam", RoadEventType.SPEED_CAMERA, LatLng(35.7, 51.4), "دوربین کنترل سرعت", 600)
++        val alert = evaluateDriverAlert(90.0, 100, listOf(event), false)
++        assertEquals(DriverAlertKind.SPEED_CAMERA, alert?.kind)
++    }
++
++    @Test
++    fun distantBumpDoesNotAlertYet() {
++        val event = RoadEvent("bump", RoadEventType.SPEED_BUMP, LatLng(35.7, 51.4), "سرعت‌گیر", 700)
++        val alert = evaluateDriverAlert(50.0, null, listOf(event), false)
++        assertNull(alert)
++    }
++
++    @Test
++    fun offRouteHasHighestPriority() {
++        val event = RoadEvent("cam", RoadEventType.SPEED_CAMERA, LatLng(35.7, 51.4), "دوربین کنترل سرعت", 100)
++        val alert = evaluateDriverAlert(120.0, 80, listOf(event), true)
++        assertEquals(DriverAlertKind.OFF_ROUTE, alert?.kind)
++    }
++}
