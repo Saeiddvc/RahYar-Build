@@ -1,5 +1,5 @@
 {
   "pass": true,
-  "details": "Final APK font resources were verified against trusted Run38 IRANSans FaNum hashes for Regular/Medium/Bold, and Run54 RahyarTypography maps all Material3 text styles to IranSansFaNum.",
-  "timestamp": "2026-08-31T17:23:00Z"
+  "details": "Run55 final candidate was post-build verified with the trusted IRANSans FaNum Regular/Medium/Bold binaries and matching Run38 hashes. RahyarTypography maps all Material3 text styles to IranSansFaNum.",
+  "timestamp": "2026-08-31T19:56:00Z"
 }
