@@ -102,5 +102,19 @@ jobs:
             exit 1
           fi
 
+      - name: Validate live HERE Traffic credential
+        env:
+          HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$HERE_TRAFFIC_API_KEY" ]; then
+            echo "QA LIVE FAIL: HERE_TRAFFIC_API_KEY is not configured."
+            exit 1
+          fi
+          curl --fail --silent --show-error --max-time 35             "https://data.traffic.hereapi.com/v7/flow?in=bbox:50.94,35.81,51.01,35.84&locationReferencing=shape&apiKey=$HERE_TRAFFIC_API_KEY"             > /tmp/here-traffic.json
+          jq -e '.results | type == "array"' /tmp/here-traffic.json >/dev/null
+          echo "PASSED: provider_manager.here_traffic_active — authenticated HERE Traffic returned a valid response."
+
       - name: Final Result
         run: echo "RahYar QA Evidence Gate PASSED — Build Approved."
