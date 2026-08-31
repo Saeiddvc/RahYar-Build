@@ -60,48 +60,99 @@ if "import ir.rahyar.app.ui.screens.HomeDashboardOverlay" not in nh:
         1
     )
 
-old_home_block = """        composable(Destinations.HOME) {
-            RahyarMapScreen(
-                locationProvider = locationProvider,
-                navigationSession = navigationSession,
-                routePreviewViewModel = routePreviewViewModel,
-                settingsRepository = settingsRepository,
-                providerManager = providerManager,
-                searchViewModel = destinationSearchViewModel,
-                onSettingsRequested = { navController.navigate(Destinations.SETTINGS) },
-                onStartNavigation = { navController.navigate(Destinations.ACTIVE_NAVIGATION) }
-            )
-        }"""
+home_start_marker = "        composable(Destinations.HOME) {\n"
+home_end_marker = "        composable(Destinations.DESTINATION_SEARCH) {\n"
+home_start = nh.find(home_start_marker)
+home_end = nh.find(home_end_marker, home_start)
+if home_start < 0 or home_end < 0:
+    raise SystemExit("Run53 HOME destination block not found")
 
-new_home_block = """        composable(Destinations.HOME) {
-            Box {
-                RahyarMapScreen(
-                    locationProvider = locationProvider,
-                    navigationSession = navigationSession,
-                    routePreviewViewModel = routePreviewViewModel,
-                    settingsRepository = settingsRepository,
-                    providerManager = providerManager,
-                    searchViewModel = destinationSearchViewModel,
-                    onSettingsRequested = { navController.navigate(Destinations.SETTINGS) },
-                    onStartNavigation = { navController.navigate(Destinations.ACTIVE_NAVIGATION) }
-                )
-                HomeDashboardOverlay(
-                    navController = navController,
-                    locationProvider = locationProvider,
-                    navigationSession = navigationSession,
-                    destinationSearchRepository = destinationSearchRepository,
-                    weatherRepository = weatherRepository,
-                    trafficRepository = trafficRepository,
-                    modifier = Modifier.align(Alignment.BottomCenter)
-                )
-            }
-        }"""
+home_block = nh[home_start:home_end]
+if "HomeDashboardOverlay(" not in home_block:
+    home_lines = home_block.rstrip().splitlines()
+    if len(home_lines) < 3 or home_lines[0].strip() != "composable(Destinations.HOME) {":
+        raise SystemExit("Run53 unexpected HOME destination block")
+    inner = ["    " + line for line in home_lines[1:-1]]
+    overlay = [
+        "            HomeDashboardOverlay(",
+        "                navController = navController,",
+        "                locationProvider = locationProvider,",
+        "                navigationSession = navigationSession,",
+        "                destinationSearchRepository = destinationSearchRepository,",
+        "                weatherRepository = weatherRepository,",
+        "                trafficRepository = trafficRepository,",
+        "                modifier = Modifier.align(Alignment.BottomCenter)",
+        "            )",
+    ]
+    rebuilt = [
+        "        composable(Destinations.HOME) {",
+        "            Box {",
+        *inner,
+        *overlay,
+        "            }",
+        "        }",
+        "",
+    ]
+    nh = nh[:home_start] + "\n".join(rebuilt) + nh[home_end:]
 
-if old_home_block not in nh:
-    raise SystemExit("Run53 HOME route block target missing")
-
-nh = nh.replace(old_home_block, new_home_block, 1)
 nav_host.write_text(nh)
+
+# Home dashboard needs persistent Trip Story read-back.
+trip_store = root / "app/src/main/java/ir/rahyar/app/data/trip/TripStoryStore.kt"
+ts = trip_store.read_text()
+if "fun load(context: Context): List<TripStoryRecord>" not in ts:
+    save_anchor = "    fun save(\n"
+    save_pos = ts.find(save_anchor)
+    if save_pos < 0:
+        raise SystemExit("Run53 TripStoryStore save anchor missing")
+    load_fn = """    fun load(context: Context): List<TripStoryRecord> {
+        val prefs = context.applicationContext
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val array = runCatching {
+            JSONArray(prefs.getString(KEY_ITEMS, "[]") ?: "[]")
+        }.getOrElse { JSONArray() }
+
+        return buildList {
+            for (index in 0 until array.length()) {
+                array.optJSONObject(index)?.toRecord()?.let(::add)
+            }
+        }
+    }
+
+"""
+    ts = ts[:save_pos] + load_fn + ts[save_pos:]
+
+    helper_anchor = "    private fun TripStoryRecord.toJson(): JSONObject =\n"
+    helper_pos = ts.find(helper_anchor)
+    if helper_pos < 0:
+        raise SystemExit("Run53 TripStoryStore toJson anchor missing")
+    from_json = """    private fun JSONObject.toRecord(): TripStoryRecord? {
+        val tripId = optString("tripId").trim()
+        if (tripId.isBlank()) return null
+        return TripStoryRecord(
+            tripId = tripId,
+            startedAtMillis = optLong("startedAtMillis", 0L),
+            endedAtMillis = optLong("endedAtMillis", 0L),
+            actualDistanceKm = optDouble("actualDistanceKm", 0.0),
+            actualDurationMinutes = optInt("actualDurationMinutes", 0),
+            averageSpeedKmh = optDouble("averageSpeedKmh", 0.0),
+            maxSpeedKmh = optDouble("maxSpeedKmh", 0.0),
+            rerouteCount = optInt("rerouteCount", 0),
+            stopCount = optInt("stopCount", 0),
+            mediaCount = optInt("mediaCount", 0),
+            weatherEventCount = optInt("weatherEventCount", 0),
+            trafficEventCount = optInt("trafficEventCount", 0),
+            navigationRating = if (has("navigationRating") && !isNull("navigationRating")) {
+                optInt("navigationRating")
+            } else {
+                null
+            }
+        )
+    }
+
+"""
+    ts = ts[:helper_pos] + from_json + ts[helper_pos:]
+    trip_store.write_text(ts)
 
 theme = root / "app/src/main/java/ir/rahyar/app/ui/theme/Theme.kt"
 t = theme.read_text()
