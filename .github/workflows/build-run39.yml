@@ -56,23 +56,23 @@ jobs:
           core = Path("app/src/main/java/ir/rahyar/app/core/navigation/PoiDetour.kt")
           core.write_text("""package ir.rahyar.app.core.navigation
 
-import ir.rahyar.app.domain.models.Route
-import kotlin.math.roundToInt
+          import ir.rahyar.app.domain.models.Route
+          import kotlin.math.roundToInt
 
-data class PoiDetourMetrics(
-    val distanceMeters: Int,
-    val durationMinutes: Int
-)
+          data class PoiDetourMetrics(
+              val distanceMeters: Int,
+              val durationMinutes: Int
+          )
 
-fun calculatePoiDetour(baseRoute: Route, routeWithStop: Route): PoiDetourMetrics? {
-    if (baseRoute.distanceKm <= 0.0 || baseRoute.durationMinutes <= 0) return null
-    if (routeWithStop.distanceKm <= 0.0 || routeWithStop.durationMinutes <= 0) return null
-    return PoiDetourMetrics(
-        distanceMeters = ((routeWithStop.distanceKm - baseRoute.distanceKm).coerceAtLeast(0.0) * 1000.0).roundToInt(),
-        durationMinutes = (routeWithStop.durationMinutes - baseRoute.durationMinutes).coerceAtLeast(0)
-    )
-}
-""")
+          fun calculatePoiDetour(baseRoute: Route, routeWithStop: Route): PoiDetourMetrics? {
+              if (baseRoute.distanceKm <= 0.0 || baseRoute.durationMinutes <= 0) return null
+              if (routeWithStop.distanceKm <= 0.0 || routeWithStop.durationMinutes <= 0) return null
+              return PoiDetourMetrics(
+                  distanceMeters = ((routeWithStop.distanceKm - baseRoute.distanceKm).coerceAtLeast(0.0) * 1000.0).roundToInt(),
+                  durationMinutes = (routeWithStop.durationMinutes - baseRoute.durationMinutes).coerceAtLeast(0)
+              )
+          }
+          """)
 
           active = Path("app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt")
           text = active.read_text()
@@ -94,61 +94,61 @@ fun calculatePoiDetour(baseRoute: Route, routeWithStop: Route): PoiDetourMetrics
           detour_test.parent.mkdir(parents=True, exist_ok=True)
           detour_test.write_text("""package ir.rahyar.app.core.navigation
 
-import ir.rahyar.app.domain.models.LatLng
-import ir.rahyar.app.domain.models.Route
-import ir.rahyar.app.domain.models.RouteType
-import ir.rahyar.app.domain.models.TransportMode
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Test
-import java.time.LocalDateTime
+          import ir.rahyar.app.domain.models.LatLng
+          import ir.rahyar.app.domain.models.Route
+          import ir.rahyar.app.domain.models.RouteType
+          import ir.rahyar.app.domain.models.TransportMode
+          import org.junit.Assert.assertEquals
+          import org.junit.Assert.assertNull
+          import org.junit.Test
+          import java.time.LocalDateTime
 
-class PoiDetourTest {
-    private fun route(distanceKm: Double, durationMinutes: Int): Route = Route(
-        id = "r-$distanceKm-$durationMinutes",
-        type = RouteType.RECOMMENDED,
-        points = listOf(LatLng(35.83, 50.95), LatLng(35.82, 51.00)),
-        durationMinutes = durationMinutes,
-        distanceKm = distanceKm,
-        eta = LocalDateTime.now(),
-        transportMode = TransportMode.CAR
-    )
+          class PoiDetourTest {
+              private fun route(distanceKm: Double, durationMinutes: Int): Route = Route(
+                  id = "r-$distanceKm-$durationMinutes",
+                  type = RouteType.RECOMMENDED,
+                  points = listOf(LatLng(35.83, 50.95), LatLng(35.82, 51.00)),
+                  durationMinutes = durationMinutes,
+                  distanceKm = distanceKm,
+                  eta = LocalDateTime.now(),
+                  transportMode = TransportMode.CAR
+              )
 
-    @Test fun realRouteDifferenceProducesDetourDistanceAndDuration() {
-        val detour = calculatePoiDetour(route(7.0, 18), route(8.25, 23))
-        assertEquals(1250, detour?.distanceMeters)
-        assertEquals(5, detour?.durationMinutes)
-    }
+              @Test fun realRouteDifferenceProducesDetourDistanceAndDuration() {
+                  val detour = calculatePoiDetour(route(7.0, 18), route(8.25, 23))
+                  assertEquals(1250, detour?.distanceMeters)
+                  assertEquals(5, detour?.durationMinutes)
+              }
 
-    @Test fun unavailableBaseRouteNeverProducesFakeZeroDetour() {
-        assertNull(calculatePoiDetour(route(0.0, 0), route(8.25, 23)))
-    }
+              @Test fun unavailableBaseRouteNeverProducesFakeZeroDetour() {
+                  assertNull(calculatePoiDetour(route(0.0, 0), route(8.25, 23)))
+              }
 
-    @Test fun unavailableStopRouteNeverProducesFakeZeroDetour() {
-        assertNull(calculatePoiDetour(route(7.0, 18), route(0.0, 0)))
-    }
-}
-""")
+              @Test fun unavailableStopRouteNeverProducesFakeZeroDetour() {
+                  assertNull(calculatePoiDetour(route(7.0, 18), route(0.0, 0)))
+              }
+          }
+          """)
 
           waypoint_test = Path("app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt")
           wt = waypoint_test.read_text()
           extra = """
-    @Test fun arrivingAtStopThenSelectingContinuationRouteKeepsFinalDestinationAndSessionAlive() {
-        val session = NavigationSession()
-        val destination = LatLng(35.82, 51.00)
-        session.setOrigin(LatLng(35.83, 50.95))
-        session.setDestination(destination)
-        session.addStop(LatLng(35.825, 50.98), "fuel-1")
-        session.beginNavigation(route("to-stop"))
-        session.updateStopStatus("fuel-1", StopStatus.ARRIVED)
-        session.selectRoute(route("continue-to-destination"))
-        val state = session.state.value
-        assertEquals(destination, state.destination)
-        assertEquals(destination, state.itinerary?.destination)
-        assertEquals(StopStatus.ARRIVED, state.itinerary?.stops?.single()?.status)
-        assertTrue(state.navigationState is NavigationState.Navigating)
-    }
-"""
+              @Test fun arrivingAtStopThenSelectingContinuationRouteKeepsFinalDestinationAndSessionAlive() {
+                  val session = NavigationSession()
+                  val destination = LatLng(35.82, 51.00)
+                  session.setOrigin(LatLng(35.83, 50.95))
+                  session.setDestination(destination)
+                  session.addStop(LatLng(35.825, 50.98), "fuel-1")
+                  session.beginNavigation(route("to-stop"))
+                  session.updateStopStatus("fuel-1", StopStatus.ARRIVED)
+                  session.selectRoute(route("continue-to-destination"))
+                  val state = session.state.value
+                  assertEquals(destination, state.destination)
+                  assertEquals(destination, state.itinerary?.destination)
+                  assertEquals(StopStatus.ARRIVED, state.itinerary?.stops?.single()?.status)
+                  assertTrue(state.navigationState is NavigationState.Navigating)
+              }
+          """
           if "arrivingAtStopThenSelectingContinuationRouteKeepsFinalDestinationAndSessionAlive" not in wt:
               pos = wt.rfind("}")
               if pos < 0:
