@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run44 CI 33362094438 passed arrivingAtStopThenSelectingContinuationRouteKeepsFinalDestinationAndSessionAlive; reroute selection keeps NavigationState.Navigating and final destination unchanged.",
+  "timestamp": "2026-08-31T05:54:00Z"
+}
