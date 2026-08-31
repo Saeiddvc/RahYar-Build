@@ -327,6 +327,23 @@ jobs:
           grep -q 'versionCode = 30' app/build.gradle.kts
           grep -q 'versionName = "1.6.8-run52-trip-story"' app/build.gradle.kts
 
+      - name: Inspect Home required typography and quick settings
+        working-directory: project
+        shell: bash
+        run: |
+          echo '--- HomeScreen ---'
+          sed -n '1,520p' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt || true
+          echo '--- Typography ---'
+          sed -n '1,300p' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt || true
+          echo '--- Font resources references ---'
+          grep -R -n 'R.font\|FontFamily\|Font(' app/src/main/java/ir/rahyar/app/ui app/src/main/java/ir/rahyar/app | head -n 180 || true
+          echo '--- Quick Settings block ---'
+          grep -n -A180 -B30 'تنظیمات سریع' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt || true
+          echo '--- Long press destination wiring ---'
+          grep -R -n -A90 -B20 'onLongPressDestination\|onMapLongClick\|setOnMapLongClickListener' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt || true
+          echo '--- Home navigation wiring ---'
+          grep -R -n -A160 -B40 'HomeScreen(' app/src/main/java/ir/rahyar/app/navigation app/src/main/java/ir/rahyar/app/ui/screens || true
+
       - name: Trip Story real-data checks
         working-directory: project
         shell: bash
