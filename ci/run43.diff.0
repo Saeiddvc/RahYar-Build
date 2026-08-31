@@ -9,8 +9,8 @@ diff -ruN Run42Base/app/build.gradle.kts Run43Source/app/build.gradle.kts
 -        versionName = "1.5.8-run42-gps-core"
 +        versionCode = 21
 +        versionName = "1.5.9-run43-road-awareness"
-         buildConfigField("String", "ORS_API_KEY", "\"\${orsApiKey.escapeBuildConfig()}\"")
-         buildConfigField("String", "HERE_API_KEY", "\"\${hereApiKey.escapeBuildConfig()}\"")
+         buildConfigField("String", "ORS_API_KEY", "\"${orsApiKey.escapeBuildConfig()}\"")
+         buildConfigField("String", "HERE_API_KEY", "\"${hereApiKey.escapeBuildConfig()}\"")
      }
 diff -ruN Run42Base/app/src/main/java/ir/rahyar/app/core/navigation/DriverAlertEvaluator.kt Run43Source/app/src/main/java/ir/rahyar/app/core/navigation/DriverAlertEvaluator.kt
 --- Run42Base/app/src/main/java/ir/rahyar/app/core/navigation/DriverAlertEvaluator.kt	1970-01-01 00:00:00.000000000 +0000
