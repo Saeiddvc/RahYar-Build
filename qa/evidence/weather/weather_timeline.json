@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run45 CI 33362918597 passed WeatherHazardsTest.timelinePreservesLiveRouteSnapshots; WeatherInfo now carries a live RouteWeatherSnapshot timeline sampled along the route.",
+  "timestamp": "2026-08-31T06:10:00Z"
+}
