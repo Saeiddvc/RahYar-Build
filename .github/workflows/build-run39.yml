@@ -15,7 +15,7 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Run51 Compile + Unit Tests
+    name: Run52 Compile + Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -320,30 +320,38 @@ jobs:
           python3 ../ci/run49.gps-hud.py
           python3 ../ci/run50.maneuver-geometry.py
           python3 ../ci/run51.ui-safety.py
+          python3 ../ci/run52.trip-story.py
 
-          sed -i 's/versionCode = 21/versionCode = 29/' app/build.gradle.kts
-          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.7-run51-ui-safety"/' app/build.gradle.kts
-          grep -q 'versionCode = 29' app/build.gradle.kts
-          grep -q 'versionName = "1.6.7-run51-ui-safety"' app/build.gradle.kts
+          sed -i 's/versionCode = 21/versionCode = 30/' app/build.gradle.kts
+          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.8-run52-trip-story"/' app/build.gradle.kts
+          grep -q 'versionCode = 30' app/build.gradle.kts
+          grep -q 'versionName = "1.6.8-run52-trip-story"' app/build.gradle.kts
 
-      - name: Inspect Trip Story and repository wiring
+      - name: Trip Story real-data checks
         working-directory: project
         shell: bash
         run: |
-          echo '--- TrafficInfo model ---'
-          grep -R -n -A120 -B20 'data class TrafficInfo' app/src/main/java || true
-          echo '--- WeatherInfo model ---'
-          grep -R -n -A160 -B20 'data class WeatherInfo' app/src/main/java || true
-          echo '--- TripStoryStore ---'
-          sed -n '1,300p' app/src/main/java/ir/rahyar/app/data/local/TripStoryStore.kt || find app/src/main/java -name '*TripStory*' -type f -maxdepth 10 -print -exec sed -n '1,300p' {} \;
-          echo '--- NavigationControls ---'
-          sed -n '1,240p' app/src/main/java/ir/rahyar/app/ui/components/NavigationControls.kt
-          echo '--- Active imports and signatures ---'
-          sed -n '1,230p' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
-          echo '--- TripStory sheet tail ---'
-          sed -n '738,1040p' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
-          echo 'TRIP_STORY_INSPECTION_DONE'
-          exit 86
+          set -euo pipefail
+          grep -q 'class TripStoryRecorder' app/src/main/java/ir/rahyar/app/core/navigation/TripStoryRuntime.kt
+          grep -q 'buildTripSummary(trace)' app/src/main/java/ir/rahyar/app/core/navigation/TripStoryRuntime.kt
+          grep -q 'if (!info.isLive) return' app/src/main/java/ir/rahyar/app/core/navigation/TripStoryRuntime.kt
+          grep -q 'ActivityResultContracts.GetContent()' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'tripStoryRecorder.recordMedia' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'tripStoryRecorder.recordWeather' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'tripStoryRecorder.recordTraffic' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'TripStoryViewMode.DRIVER' app/src/main/java/ir/rahyar/app/ui/components/TripStoryMotionView.kt
+          grep -q 'TripStoryViewMode.AERIAL' app/src/main/java/ir/rahyar/app/ui/components/TripStoryMotionView.kt
+          grep -q 'TripStoryViewMode.OVERVIEW' app/src/main/java/ir/rahyar/app/ui/components/TripStoryMotionView.kt
+          grep -q 'tripStoryEffectsAt' app/src/main/java/ir/rahyar/app/ui/components/TripStoryMotionView.kt
+          grep -q 'داده سفر واقعی برای ساخت Trip Story وجود ندارد.' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'onlyRealTripTraceCanBuildStory' app/src/test/java/ir/rahyar/app/core/navigation/TripStoryRuntimeTest.kt
+          grep -q 'selectedRealMediaAppearsInTimeline' app/src/test/java/ir/rahyar/app/core/navigation/TripStoryRuntimeTest.kt
+          grep -q 'weatherTimelineAcceptsLiveProviderDataOnly' app/src/test/java/ir/rahyar/app/core/navigation/TripStoryRuntimeTest.kt
+          grep -q 'trafficTimelineAcceptsLiveProviderDataOnly' app/src/test/java/ir/rahyar/app/core/navigation/TripStoryRuntimeTest.kt
+          grep -q 'threeViewModesHaveDistinctMotionPolicies' app/src/test/java/ir/rahyar/app/core/navigation/TripStoryRuntimeTest.kt
+          grep -q 'realEffectsOnlyNeverInventWeatherTrafficOrMedia' app/src/test/java/ir/rahyar/app/core/navigation/TripStoryRuntimeTest.kt
+          ! grep -A90 'if (showTripStory)' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt | grep -q 'initialRoute.distanceKm'
+          ! grep -A90 'if (showTripStory)' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt | grep -q 'initialRoute.durationMinutes'
 
       - name: Route preview UI safety checks
         working-directory: project
