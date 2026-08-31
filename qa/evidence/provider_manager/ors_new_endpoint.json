@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run47 CI 33363937265 passed source contract and live endpoint smoke. ORS directions now use https://api.heigit.org/openrouteservice/v2/directions/...; the deprecated api.openrouteservice.org directions endpoint is absent.",
+  "timestamp": "2026-08-31T06:25:00Z"
+}
