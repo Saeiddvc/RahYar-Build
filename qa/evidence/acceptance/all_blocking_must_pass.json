@@ -1,5 +1,5 @@
 {
-  "pass": true,
-  "details": "All 70 blocking QA items have verified evidence and passed successfully.",
-  "timestamp": "2026-08-31T22:19:00+03:30"
+  "pass": false,
+  "details": "Field screenshots invalidate at least car_icon_not_pin and no_story_if_no_trip. Automated source-contract success cannot override contradictory device evidence; final release remains blocked.",
+  "timestamp": "2026-08-31T22:30:00+03:30"
 }
