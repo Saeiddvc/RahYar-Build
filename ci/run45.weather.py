@@ -81,7 +81,7 @@ fun buildWeatherInfoFromSnapshots(
     val summary = buildString {
         append(conditions.joinToString("، "))
         append(" • ")
-        if (minTemp == maxTemp) append("\${minTemp}°") else append("\${minTemp} تا \${maxTemp}°")
+        if (minTemp == maxTemp) append("${minTemp}°") else append("${minTemp} تا ${maxTemp}°")
     }
 
     return WeatherInfo(
@@ -163,7 +163,7 @@ class OpenMeteoWeatherApi(
             .build()
 
         http.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("Open-Meteo HTTP \${response.code}")
+            if (!response.isSuccessful) throw IOException("Open-Meteo HTTP ${response.code}")
             val current = JSONObject(response.body?.string().orEmpty()).getJSONObject("current")
             val code = current.optInt("weather_code", -1)
             val precipitation = current.optDouble("precipitation", 0.0)
@@ -372,12 +372,12 @@ hud_reaction = """        if (active != null) {
                 ) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
                         Text(
-                            text = "آب‌وهوا: \${weather.summary}",
+                            text = "آب‌وهوا: ${weather.summary}",
                             style = MaterialTheme.typography.bodySmall
                         )
                         weather.alerts.firstOrNull()?.let { alert ->
                             Text(
-                                text = "هشدار مسیر: \$alert",
+                                text = "هشدار مسیر: $alert",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.error
                             )
