@@ -618,6 +618,14 @@ jobs:
           HERE_API_KEY: ${{ secrets.HERE_API_KEY }}
         run: gradle testDebugUnitTest assembleDebug --stacktrace
 
+      - name: Upload Run52 APK candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: RahYar-1.6.8-Run52-APK-Candidate
+          path: project/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
   qa-evidence:
     name: Strict QA Evidence Gate
     runs-on: ubuntu-latest
