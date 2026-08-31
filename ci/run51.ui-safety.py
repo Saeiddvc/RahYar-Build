@@ -191,7 +191,7 @@ map_screen = root / "app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.
 m = map_screen.read_text()
 
 if "import android.os.SystemClock" not in m:
-    m = m.replace("import android.graphics.PointF\\n", "import android.graphics.PointF\\nimport android.os.SystemClock\\n", 1)
+    m = m.replace("import android.graphics.PointF\n", "import android.graphics.PointF\nimport android.os.SystemClock\n", 1)
 
 core_imports = """import ir.rahyar.app.core.navigation.StartNavigationGate
 import ir.rahyar.app.core.navigation.isRenderableRoute
@@ -201,16 +201,16 @@ import ir.rahyar.app.core.navigation.selectRoutePreviewRoutes
 import ir.rahyar.app.core.navigation.shouldShowStickyStart
 """
 if "import ir.rahyar.app.core.navigation.StartNavigationGate" not in m:
-    anchor = "import ir.rahyar.app.core.map.RahyarMapView\\n"
+    anchor = "import ir.rahyar.app.core.map.RahyarMapView\n"
     if anchor not in m:
         raise SystemExit("Run51 core import anchor missing")
     m = m.replace(anchor, anchor + core_imports, 1)
 
 if "import ir.rahyar.app.domain.models.CameraPadding" not in m:
-    anchor = "import ir.rahyar.app.domain.models.LatLng\\n"
+    anchor = "import ir.rahyar.app.domain.models.LatLng\n"
     if anchor not in m:
         raise SystemExit("Run51 CameraPadding import anchor missing")
-    m = m.replace(anchor, "import ir.rahyar.app.domain.models.CameraPadding\\n" + anchor, 1)
+    m = m.replace(anchor, "import ir.rahyar.app.domain.models.CameraPadding\n" + anchor, 1)
 
 m = m.replace(
     "val routeSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)",
@@ -381,12 +381,12 @@ sheet = root / "app/src/main/java/ir/rahyar/app/ui/components/RoutePreviewSheet.
 s = sheet.read_text()
 
 if "import ir.rahyar.app.core.navigation.isRenderableRoute" not in s:
-    anchor = "import ir.rahyar.app.core.provider.ProviderManager\\n"
+    anchor = "import ir.rahyar.app.core.provider.ProviderManager\n"
     if anchor not in s:
         raise SystemExit("Run51 RoutePreviewSheet import anchor missing")
     s = s.replace(
         anchor,
-        anchor + "import ir.rahyar.app.core.navigation.isRenderableRoute\\nimport ir.rahyar.app.core.navigation.selectRoutePreviewRoutes\\n",
+        anchor + "import ir.rahyar.app.core.navigation.isRenderableRoute\nimport ir.rahyar.app.core.navigation.selectRoutePreviewRoutes\n",
         1
     )
 
