@@ -15,7 +15,7 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Run53 Compile + Unit Tests
+    name: Run54 Compile + Unit Tests
     runs-on: ubuntu-latest
     env:
       HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
@@ -324,11 +324,12 @@ jobs:
           python3 ../ci/run51.ui-safety.py
           python3 ../ci/run52.trip-story.py
           python3 ../ci/run53.home-required.py
+          python3 ../ci/run54.fonts-final.py
 
-          sed -i 's/versionCode = 21/versionCode = 31/' app/build.gradle.kts
-          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.9-run53-home-required"/' app/build.gradle.kts
-          grep -q 'versionCode = 31' app/build.gradle.kts
-          grep -q 'versionName = "1.6.9-run53-home-required"' app/build.gradle.kts
+          sed -i 's/versionCode = 21/versionCode = 32/' app/build.gradle.kts
+          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.7.0-run54-final-gate"/' app/build.gradle.kts
+          grep -q 'versionCode = 32' app/build.gradle.kts
+          grep -q 'versionName = "1.7.0-run54-final-gate"' app/build.gradle.kts
 
       - name: Home dashboard and required UX checks
         working-directory: project
@@ -372,10 +373,13 @@ jobs:
           grep -q 'decimalSeparatorIsPersian' app/src/test/java/ir/rahyar/app/core/format/PersianNumberFormatterTest.kt
 
           # Font source contract: exactly the three approved IRANSans resource families.
-          grep -q 'Font(R.font.iransans_regular, FontWeight.Normal)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
-          grep -q 'Font(R.font.iransans_medium, FontWeight.Medium)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
-          grep -q 'Font(R.font.iransans_bold, FontWeight.Bold)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
-          test "$(grep -R 'Font(R.font.' app/src/main/java/ir/rahyar/app/ui | grep -v 'iransans_' | wc -l)" -eq 0
+          grep -q 'Font(R.font.iransans_fanum_regular, FontWeight.Normal)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
+          grep -q 'Font(R.font.iransans_fanum_medium, FontWeight.Medium)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
+          grep -q 'Font(R.font.iransans_fanum_bold, FontWeight.Bold)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
+          grep -q 'displayLarge = BaseTypography.displayLarge.copy(fontFamily = IranSansFaNum)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
+          grep -q 'labelSmall = BaseTypography.labelSmall.copy(fontFamily = IranSansFaNum)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
+          test "$(grep -R 'Font(R.font.' app/src/main/java/ir/rahyar/app/ui | grep -v 'iransans_fanum_' | wc -l)" -eq 0
+          grep -q 'quickSettingsContainAllRequiredControlsAndPersistInSession' app/src/test/java/ir/rahyar/app/navigation/QuickSettingsContractTest.kt
 
       - name: Trip Story real-data checks
         working-directory: project
@@ -652,9 +656,9 @@ jobs:
           set -euo pipefail
           mkdir -p project/app/src/main/res/font
           FONT="$(fc-match 'DejaVu Sans' -f '%{file}\n' | head -n1)"
-          cp "$FONT" project/app/src/main/res/font/iransans_regular.ttf
-          cp "$FONT" project/app/src/main/res/font/iransans_medium.ttf
-          cp "$FONT" project/app/src/main/res/font/iransans_bold.ttf
+          cp "$FONT" project/app/src/main/res/font/iransans_fanum_regular.ttf
+          cp "$FONT" project/app/src/main/res/font/iransans_fanum_medium.ttf
+          cp "$FONT" project/app/src/main/res/font/iransans_fanum_bold.ttf
 
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17' }
@@ -669,10 +673,10 @@ jobs:
           HERE_API_KEY: ${{ secrets.HERE_API_KEY }}
         run: gradle testDebugUnitTest assembleDebug --stacktrace
 
-      - name: Upload Run52 APK candidate
+      - name: Upload Run54 APK candidate
         uses: actions/upload-artifact@v4
         with:
-          name: RahYar-1.6.9-Run53-APK-Candidate
+          name: RahYar-1.7.0-Run54-APK-Candidate
           path: project/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
