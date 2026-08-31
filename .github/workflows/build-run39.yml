@@ -15,7 +15,7 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Run46 Compile + Unit Tests
+    name: Run47 Compile + Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -315,11 +315,12 @@ jobs:
 
           python3 ../ci/run45.weather.py
           python3 ../ci/run46.search.py
+          python3 ../ci/run47.providers.py
 
-          sed -i 's/versionCode = 21/versionCode = 24/' app/build.gradle.kts
-          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.2-run46-search"/' app/build.gradle.kts
-          grep -q 'versionCode = 24' app/build.gradle.kts
-          grep -q 'versionName = "1.6.2-run46-search"' app/build.gradle.kts
+          sed -i 's/versionCode = 21/versionCode = 25/' app/build.gradle.kts
+          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.3-run47-providers"/' app/build.gradle.kts
+          grep -q 'versionCode = 25' app/build.gradle.kts
+          grep -q 'versionName = "1.6.3-run47-providers"' app/build.gradle.kts
 
       - name: GPS core source contract checks
         working-directory: project
@@ -371,6 +372,65 @@ jobs:
           grep -q 'routeSegmentPolylines' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
           grep -q 'segmentColors' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
           grep -q 'twoPendingStopsProduceThreeIndependentSegments' app/src/test/java/ir/rahyar/app/core/navigation/RouteSegmentPlannerTest.kt
+
+      - name: Provider manager source contract checks
+        working-directory: project
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'api.heigit.org/openrouteservice/v2/directions' app/src/main/java/ir/rahyar/app/data/remote/DirectionsApi.kt
+          ! grep -q 'api.openrouteservice.org/v2/directions' app/src/main/java/ir/rahyar/app/data/remote/DirectionsApi.kt
+          grep -q 'FallbackDirectionsApi(primary = ors, fallback = osrm)' app/src/main/java/ir/rahyar/app/di/AppModule.kt
+          grep -q 'ObservedDirectionsApi(ProviderTelemetry.OSRM' app/src/main/java/ir/rahyar/app/di/AppModule.kt
+          grep -q 'ObservedWeatherApi(ProviderTelemetry.OPEN_METEO' app/src/main/java/ir/rahyar/app/di/AppModule.kt
+          grep -q 'ObservedTrafficApi(ProviderTelemetry.HERE_TRAFFIC' app/src/main/java/ir/rahyar/app/di/AppModule.kt
+          grep -q 'ProviderTelemetry.PHOTON' app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
+          grep -q 'ProviderTelemetry.NOMINATIM' app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
+          grep -q 'successTracksLatencyAndQuota' app/src/test/java/ir/rahyar/app/core/provider/ProviderTelemetryTest.kt
+          grep -q 'osrmFallbackRunsWhenPrimaryFails' app/src/test/java/ir/rahyar/app/data/remote/FallbackDirectionsApiTest.kt
+          grep -q 'unavailableTrafficDoesNotFabricateLiveTraffic' app/src/test/java/ir/rahyar/app/data/remote/ProviderIntegrityTest.kt
+
+      - name: Live OSRM fallback smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 2 --max-time 35             'https://router.project-osrm.org/route/v1/driving/50.950,35.830;51.000,35.820?overview=false&steps=false'             > /tmp/osrm.json
+          jq -e '.code == "Ok"' /tmp/osrm.json >/dev/null
+          jq -e '.routes | length > 0' /tmp/osrm.json >/dev/null
+          echo "OSRM public fallback returned a real route."
+
+      - name: HeiGIT ORS endpoint smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl --silent --show-error --max-time 25 -o /tmp/ors-options.txt -w '%{http_code}'             -X OPTIONS 'https://api.heigit.org/openrouteservice/v2/directions/driving-car/json')"
+          case "$code" in
+            200|204|401|403) ;;
+            *) echo "Unexpected HeiGIT status: $code"; exit 1 ;;
+          esac
+          echo "HeiGIT OpenRouteService endpoint is reachable: HTTP $code"
+
+      - name: Live ORS authenticated smoke
+        if: ${{ env.ORS_API_KEY != '' }}
+        env:
+          ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 35             -H "Authorization: $ORS_API_KEY"             -H 'Content-Type: application/json'             --data '{"coordinates":[[50.950,35.830],[51.000,35.820]]}'             'https://api.heigit.org/openrouteservice/v2/directions/driving-car/json'             > /tmp/ors-live.json
+          jq -e '.routes | length > 0' /tmp/ors-live.json >/dev/null
+          echo "Authenticated ORS route succeeded."
+
+      - name: Live HERE Traffic authenticated smoke
+        if: ${{ env.HERE_API_KEY != '' }}
+        env:
+          HERE_API_KEY: ${{ secrets.HERE_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 35             "https://data.traffic.hereapi.com/v7/flow?in=bbox:50.94,35.81,51.01,35.84&locationReferencing=shape&apiKey=$HERE_API_KEY"             > /tmp/here-traffic.json
+          jq -e '.results | type == "array"' /tmp/here-traffic.json >/dev/null
+          echo "Authenticated HERE Traffic request succeeded."
 
       - name: Search quality source contract checks
         working-directory: project
@@ -452,8 +512,8 @@ jobs:
       - name: Unit tests and compile
         working-directory: project
         env:
-          ORS_API_KEY: ''
-          HERE_API_KEY: ''
+          ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
+          HERE_API_KEY: ${{ secrets.HERE_API_KEY }}
         run: gradle testDebugUnitTest assembleDebug --stacktrace
 
   qa-evidence:
