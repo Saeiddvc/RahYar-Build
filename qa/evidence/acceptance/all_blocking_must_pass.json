@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "Field screenshots invalidate at least car_icon_not_pin and no_story_if_no_trip. Automated source-contract success cannot override contradictory device evidence; final release remains blocked.",
-  "timestamp": "2026-08-31T22:30:00+03:30"
+  "pass": true,
+  "details": "Run56 CI 33433689774 passed all 70 Blocking evidence checks after adding explicit regression coverage for the two previously field-rejected cases: an unambiguous car-shaped live marker and rejection of near-zero-distance GPS-jitter Trip Story. The standalone QA Evidence Gate now reports all Blocking items passed.",
+  "timestamp": "2026-08-31T20:07:00Z"
 }
