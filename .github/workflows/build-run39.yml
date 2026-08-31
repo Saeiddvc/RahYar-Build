@@ -1,12 +1,54 @@
 name: RahYar Run 41 Functional Core
+
 on:
   workflow_dispatch:
   push:
     branches: [ main ]
-    paths: ['.github/workflows/build-run39.yml','ci/run41b.diff.0','ci/run41b.diff.1','ci/run41b.diff.2','ci/run41b.diff.3']
+    paths:
+      - '.github/workflows/build-run39.yml'
+      - 'ci/run41b.diff.0'
+      - 'ci/run41b.diff.1'
+      - 'ci/run41b.diff.2'
+      - 'ci/run41b.diff.3'
+      - 'qa/RahYar_QA_Checklist_v1.5.5.json'
+  pull_request:
+    branches: [ main, develop ]
+
 permissions: { contents: read }
+
 jobs:
+  qa-gate:
+    name: Pre-Build Mandatory QA Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate checklist JSON
+        run: |
+          set -euo pipefail
+          jq -e . qa/RahYar_QA_Checklist_v1.5.5.json > /dev/null
+
+      - name: Reject on any blocking or acceptance failure
+        run: |
+          set -euo pipefail
+          blocking_failures="$(jq '[.blocking[][] | select(. != true)] | length' qa/RahYar_QA_Checklist_v1.5.5.json)"
+          acceptance_failures="$(jq '[.acceptance_gate[] | select(. != true)] | length' qa/RahYar_QA_Checklist_v1.5.5.json)"
+          echo "Blocking failures: $blocking_failures"
+          echo "Acceptance failures: $acceptance_failures"
+          if [ "$blocking_failures" -ne 0 ] || [ "$acceptance_failures" -ne 0 ]; then
+            echo "RahYar build rejected by mandatory QA gate."
+            jq -r '.blocking | to_entries[] as $g | $g.value | to_entries[] | select(.value != true) | "BLOCKING FAIL: \($g.key).\(.key)"' qa/RahYar_QA_Checklist_v1.5.5.json
+            jq -r '.acceptance_gate | to_entries[] | select(.value != true) | "ACCEPTANCE FAIL: \(.key)"' qa/RahYar_QA_Checklist_v1.5.5.json
+            exit 1
+          fi
+
+      - name: Required review report
+        run: |
+          jq -r '.required | to_entries[] | select(.value != true) | "REQUIRED WARNING: \(.key)"' qa/RahYar_QA_Checklist_v1.5.5.json || true
+
   build:
+    name: Build APK
+    needs: qa-gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +69,7 @@ jobs:
           patch -p2 < /tmp/run41.diff
           grep -q 'versionCode = 19' app/build.gradle.kts
           grep -q 'versionName = "1.5.7-functional-core"' app/build.gradle.kts
+
       - name: Supply build-time Persian font resources
         shell: bash
         run: |
@@ -36,14 +79,18 @@ jobs:
           cp "$FONT" project/app/src/main/res/font/iransans_regular.ttf
           cp "$FONT" project/app/src/main/res/font/iransans_medium.ttf
           cp "$FONT" project/app/src/main/res/font/iransans_bold.ttf
+
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17' }
+
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: '8.7' }
+
       - name: Build debug APK
         working-directory: project
         env: { ORS_API_KEY: '', HERE_API_KEY: '' }
         run: gradle assembleDebug --stacktrace
+
       - name: Package
         shell: bash
         run: |
@@ -51,6 +98,7 @@ jobs:
           APK="$(find project/app/build/outputs/apk/debug -name '*.apk' -type f | head -n1)"
           cp "$APK" RahYar-1.5.7-Run41-Functional-Core.apk
           sha256sum RahYar-1.5.7-Run41-Functional-Core.apk > RahYar-1.5.7-Run41-Functional-Core.apk.sha256
+
       - uses: actions/upload-artifact@v4
         with:
           name: RahYar-1.5.7-Run41-Functional-Core
