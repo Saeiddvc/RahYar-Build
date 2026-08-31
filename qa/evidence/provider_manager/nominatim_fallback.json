@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run47 CI 33363937265 passed live Nominatim smoke and search fallback source contracts; Nominatim remains the fallback when Photon results are insufficient.",
+  "timestamp": "2026-08-31T06:25:00Z"
+}
