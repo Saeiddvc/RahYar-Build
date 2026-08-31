@@ -33,8 +33,8 @@ fun normalizePersianSearch(value: String): String {
         .map { digitMap[it] ?: it }
         .joinToString("")
         .replace(Regex("[\\u064B-\\u065F\\u0670]"), "")
-        .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
-        .replace(Regex("\\s+"), " ")
+        .replace(Regex("[^\\\\p{L}\\\\p{N}\\\\s]"), " ")
+        .replace(Regex("\\\\s+"), " ")
         .trim()
         .lowercase()
     return cleaned
@@ -194,16 +194,24 @@ class SearchRankingTest {
 repo = root / "app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt"
 text = repo.read_text()
 
-imports = [
-    ("import android.content.Context\n", "import android.Manifest\nimport android.content.Context\nimport android.content.pm.PackageManager\nimport android.location.LocationManager\n"),
-    ("import ir.rahyar.app.domain.models.LatLng\n", "import ir.rahyar.app.domain.models.LatLng\nimport ir.rahyar.app.core.search.rankSearchResults\n"),
-    ("import org.json.JSONArray\n", "import org.json.JSONArray\nimport org.json.JSONObject\n"),
-]
-for old, new in imports:
-    if new.splitlines()[0] not in text:
-        if old not in text:
-            raise SystemExit(f"Run46 import anchor missing: {old!r}")
-        text = text.replace(old, new, 1)
+if "import android.Manifest" not in text:
+    text = text.replace(
+        "import android.content.Context\n",
+        "import android.Manifest\nimport android.content.Context\nimport android.content.pm.PackageManager\nimport android.location.LocationManager\n",
+        1
+    )
+if "import ir.rahyar.app.core.search.rankSearchResults" not in text:
+    text = text.replace(
+        "import ir.rahyar.app.domain.models.LatLng\n",
+        "import ir.rahyar.app.domain.models.LatLng\nimport ir.rahyar.app.core.search.rankSearchResults\n",
+        1
+    )
+if "import org.json.JSONObject" not in text:
+    text = text.replace(
+        "import org.json.JSONArray\n",
+        "import org.json.JSONArray\nimport org.json.JSONObject\n",
+        1
+    )
 
 class_anchor = """class DestinationSearchRepositoryImpl(
     context: Context
@@ -270,10 +278,10 @@ search_impl = """    override suspend fun search(query: String): List<SearchResu
                 if (!lat.isFinite() || !lon.isFinite()) continue
 
                 val props = feature.optJSONObject("properties") ?: JSONObject()
-                val title = props.optString("name").trim()
-                    .ifBlank { props.optString("street").trim() }
-                    .ifBlank { props.optString("city").trim() }
-                    .ifBlank { continue }
+                var title = props.optString("name").trim()
+                if (title.isBlank()) title = props.optString("street").trim()
+                if (title.isBlank()) title = props.optString("city").trim()
+                if (title.isBlank()) continue
                 val subtitle = listOf(
                     props.optString("street"),
                     props.optString("district"),
@@ -315,9 +323,9 @@ search_impl = """    override suspend fun search(query: String): List<SearchResu
                 val lat = obj.optString("lat").toDoubleOrNull() ?: continue
                 val lon = obj.optString("lon").toDoubleOrNull() ?: continue
                 val display = obj.optString("display_name").trim()
-                val title = obj.optString("name").trim()
-                    .ifBlank { display.substringBefore(',').trim() }
-                    .ifBlank { continue }
+                var title = obj.optString("name").trim()
+                if (title.isBlank()) title = display.substringBefore(',').trim()
+                if (title.isBlank()) continue
                 add(
                     SearchResult(
                         id = "nominatim_${obj.optString("place_id", i.toString())}",
