@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "No verified automated evidence yet.",
-  "timestamp": "2026-08-31T07:43:02+03:30"
+  "pass": true,
+  "details": "Run43 application compiled and unit tests passed in CI 33361103057. Live Overpass speed-limit provider smoke passed in CI 33361262503 and returned real OSM maxspeed data.",
+  "timestamp": "2026-08-31T05:40:00Z"
 }
