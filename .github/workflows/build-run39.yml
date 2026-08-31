@@ -15,26 +15,50 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Compile Check
+    name: Run42 Compile + Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Reconstruct source and apply Run40 + Run41
+      - name: Reconstruct source and apply Run40 + Run41 + Run42
         shell: bash
         run: |
           set -euo pipefail
           cat ci/source.part0.b64 ci/source.part1.b64 ci/source.part2.b64 ci/source.part3.b64 | base64 -d > /tmp/base.tar.zst
           mkdir project
           tar --zstd -xf /tmp/base.tar.zst -C project
+
           cat ci/run40.diff.0 ci/run40.diff.1 > /tmp/run40.diff
           cd project
           patch -p1 < /tmp/run40.diff
           patch -p1 < ../ci/run40.fix1.diff
           cd ..
+
           cat ci/run41b.diff.0 ci/run41b.diff.1 ci/run41b.diff.2 ci/run41b.diff.3 > /tmp/run41.diff
           cd project
           patch -p2 < /tmp/run41.diff
+          cd ..
+
+          cat ci/run42.diff.0 ci/run42.diff.1 ci/run42.diff.2 ci/run42.diff.3 ci/run42.diff.4 ci/run42.diff.5 > /tmp/run42.diff
+          cd project
+          patch -p1 < /tmp/run42.diff
+
+          grep -q 'versionCode = 20' app/build.gradle.kts
+          grep -q 'versionName = "1.5.8-run42-gps-core"' app/build.gradle.kts
+
+      - name: Source contract checks for GPS core
+        working-directory: project
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'R.drawable.ic_vehicle_marker' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'SymbolLayer(VEHICLE_LAYER_ID' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'ValueAnimator.ofFloat' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'evaluateOffRoute' app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt
+          grep -q 'shouldSnapToRoute' app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt
+          grep -q 'NavigationSignalFusion' app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt
+          grep -q 'setWaitForAccurateLocation(true)' app/src/main/java/ir/rahyar/app/core/location/FusedLocationProviderImpl.kt
+          grep -q 'setMinUpdateIntervalMillis(500L)' app/src/main/java/ir/rahyar/app/core/location/FusedLocationProviderImpl.kt
 
       - name: Supply temporary compile-only font resources
         shell: bash
@@ -52,12 +76,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: '8.7' }
 
-      - name: Compile only
+      - name: Unit tests and compile
         working-directory: project
         env:
           ORS_API_KEY: ''
           HERE_API_KEY: ''
-        run: gradle assembleDebug --stacktrace
+        run: gradle testDebugUnitTest assembleDebug --stacktrace
 
   qa-evidence:
     name: Strict QA Evidence Gate
@@ -80,7 +104,7 @@ jobs:
               failed=1
             fi
           done < <(
-            jq -r '.blocking | to_entries[] | .key as $g | .value | to_entries[] | [$g,.key,(.value|tostring)] | @tsv'               qa/RahYar_QA_Checklist_v1.5.5.json
+            jq -r '.blocking | to_entries[] | .key as $g | .value | to_entries[] | [$g,.key,(.value|tostring)] | @tsv' qa/RahYar_QA_Checklist_v1.5.5.json
           )
 
           while IFS=$'\t' read -r item required; do
@@ -91,7 +115,7 @@ jobs:
               failed=1
             fi
           done < <(
-            jq -r '.acceptance_gate | to_entries[] | [.key,(.value|tostring)] | @tsv'               qa/RahYar_QA_Checklist_v1.5.5.json
+            jq -r '.acceptance_gate | to_entries[] | [.key,(.value|tostring)] | @tsv' qa/RahYar_QA_Checklist_v1.5.5.json
           )
 
           [ "$failed" -eq 0 ] || { echo "Release APK blocked by QA evidence gate."; exit 1; }
@@ -101,5 +125,4 @@ jobs:
     needs: [compile-check, qa-evidence]
     runs-on: ubuntu-latest
     steps:
-      - run: |
-          echo "QA gate passed. Release packaging is enabled only after all evidence is verified."
+      - run: echo "All strict QA evidence passed; release packaging may proceed."
