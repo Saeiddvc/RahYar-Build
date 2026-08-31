@@ -15,7 +15,7 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Run54 Compile + Unit Tests
+    name: Run55 Compile + Unit Tests
     runs-on: ubuntu-latest
     env:
       HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
@@ -325,31 +325,28 @@ jobs:
           python3 ../ci/run52.trip-story.py
           python3 ../ci/run53.home-required.py
           python3 ../ci/run54.fonts-final.py
+          python3 ../ci/run55.field-quality.py
 
-          sed -i 's/versionCode = 21/versionCode = 32/' app/build.gradle.kts
-          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.7.0-run54-final-gate"/' app/build.gradle.kts
-          grep -q 'versionCode = 32' app/build.gradle.kts
-          grep -q 'versionName = "1.7.0-run54-final-gate"' app/build.gradle.kts
+          sed -i 's/versionCode = 21/versionCode = 33/' app/build.gradle.kts
+          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.7.1-run55-field-quality"/' app/build.gradle.kts
+          grep -q 'versionCode = 33' app/build.gradle.kts
+          grep -q 'versionName = "1.7.1-run55-field-quality"' app/build.gradle.kts
 
-      - name: Inspect field-failure implementation
+      - name: Field quality regression checks
         working-directory: project
         shell: bash
         run: |
-          echo '--- VEHICLE SYMBOL BLOCK ---'
-          grep -n -A160 -B80 'VEHICLE_LAYER_ID' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt || true
-          echo '--- VEHICLE RUNTIME CALLS ---'
-          grep -n -A100 -B70 'ensureVehicleLayer(' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt || true
-          grep -n -A100 -B70 'ValueAnimator.ofFloat' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt || true
-          echo '--- MAP SETUP / STYLE ---'
-          grep -n -A160 -B50 'RahyarMapView' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt || true
-          echo '--- TRACEPOINT MODEL ---'
-          grep -n -A120 -B20 'data class TracePoint' app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt || true
-          echo '--- TRACE APPEND ---'
-          grep -R -n -A100 -B40 'appendTracePoint' app/src/main/java/ir/rahyar/app | head -n 320 || true
-          echo '--- ACTIVE ROUTE UNAVAILABLE UI ---'
-          grep -R -n -A90 -B30 'مسیر فعال در دسترس نیست' app/src/main/java/ir/rahyar/app || true
-          echo '--- HOME OVERLAY MAP / LOCATION ---'
-          grep -n -A260 -B60 'HomeDashboardOverlay' app/src/main/java/ir/rahyar/app/ui/screens/HomeDashboardOverlay.kt || true
+          set -euo pipefail
+          grep -q 'accuracyMeters: Float? = null' app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt
+          grep -q 'shouldAcceptTracePoint(previous, point)' app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt
+          grep -q 'accuracyMeters = sample.horizontalAccuracyMeters.toFloat()' app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt
+          grep -q 'isMeaningfulRealTrip(sortedTrace)' app/src/main/java/ir/rahyar/app/core/navigation/TripStoryRuntime.kt
+          grep -q 'zeroDistanceOneMinuteGpsJitterCannotBuildStory' app/src/test/java/ir/rahyar/app/core/navigation/TripStoryRuntimeTest.kt
+          grep -q 'lowSpeedGpsJitterDoesNotBecomeRealTrip' app/src/test/java/ir/rahyar/app/core/navigation/TripTraceQualityTest.kt
+          grep -q 'identicalWeatherSamplesDoNotSpamTimeline' app/src/test/java/ir/rahyar/app/core/navigation/TripStoryRuntimeTest.kt
+          grep -q 'navigationVehicleBitmap()' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'numberedStopBitmap(stop.order, arrived)' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'contentColor = MaterialTheme.colorScheme.onBackground' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
 
       - name: Home dashboard and required UX checks
         working-directory: project
@@ -704,13 +701,36 @@ jobs:
           HERE_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
         run: gradle testDebugUnitTest assembleDebug --stacktrace
 
-      - name: Upload Run54 APK candidate
+      - name: Upload Run55 APK candidate
         uses: actions/upload-artifact@v4
         with:
-          name: RahYar-1.7.0-Run54-APK-Candidate
+          name: RahYar-1.7.1-Run55-APK-Candidate
           path: project/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
+
+      - name: Require HERE Traffic credential for release
+        env:
+          HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$HERE_TRAFFIC_API_KEY" ]; then
+            echo "HERE_TRAFFIC_API_KEY is not configured; candidate was built but final release remains blocked."
+            exit 1
+          fi
+
+      - name: Live HERE Traffic authenticated smoke
+        env:
+          HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 35 \
+            "https://data.traffic.hereapi.com/v7/flow?in=bbox:50.94,35.81,51.01,35.84&locationReferencing=shape&apiKey=$HERE_TRAFFIC_API_KEY" \
+            > /tmp/here-traffic.json
+          jq -e '.results | type == "array" and length >= 0' /tmp/here-traffic.json >/dev/null
+          echo "Authenticated HERE Traffic request succeeded."
 
   qa-evidence:
     name: Strict QA Evidence Gate
