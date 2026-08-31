@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run44 CI 33362094438 passed PoiDetourTest with a real base-route vs route-with-stop delta (7.0 km -> 8.25 km = 1250 m) and the calculation is wired into ActiveNavigationScreen.",
+  "timestamp": "2026-08-31T05:54:00Z"
+}
