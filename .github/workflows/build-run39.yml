@@ -76,19 +76,24 @@ jobs:
 
           active = Path("app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt")
           text = active.read_text()
-          old = """                                                    poi.copy(
-                                                        detourDistanceMeters = ((withStop.distanceKm - baseline.distanceKm).coerceAtLeast(0.0) * 1000).roundToInt(),
-                                                        detourDurationMinutes = (withStop.durationMinutes - baseline.durationMinutes).coerceAtLeast(0)
-                                                    )"""
-          new = """                                                    val detour = ir.rahyar.app.core.navigation.calculatePoiDetour(baseline, withStop)
-                                                        ?: return@mapNotNull null
-                                                    poi.copy(
-                                                        detourDistanceMeters = detour.distanceMeters,
-                                                        detourDurationMinutes = detour.durationMinutes
-                                                    )"""
-          if old not in text:
+          lines = text.splitlines()
+          metric_index = next(
+              (i for i, line in enumerate(lines)
+               if "detourDistanceMeters = ((withStop.distanceKm - baseline.distanceKm)" in line),
+              -1
+          )
+          if metric_index < 1:
               raise SystemExit("Run44 detour integration target not found")
-          active.write_text(text.replace(old, new, 1))
+          indent = lines[metric_index - 1][:len(lines[metric_index - 1]) - len(lines[metric_index - 1].lstrip())]
+          lines[metric_index - 1:metric_index + 3] = [
+              indent + "val detour = ir.rahyar.app.core.navigation.calculatePoiDetour(baseline, withStop)",
+              indent + "    ?: return@mapNotNull null",
+              indent + "poi.copy(",
+              indent + "    detourDistanceMeters = detour.distanceMeters,",
+              indent + "    detourDurationMinutes = detour.durationMinutes",
+              indent + ")",
+          ]
+          active.write_text("\n".join(lines) + "\n")
 
           detour_test = Path("app/src/test/java/ir/rahyar/app/core/navigation/PoiDetourTest.kt")
           detour_test.parent.mkdir(parents=True, exist_ok=True)
