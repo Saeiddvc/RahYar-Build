@@ -135,6 +135,158 @@ jobs:
           }
           """)
 
+          segment_planner = Path("app/src/main/java/ir/rahyar/app/core/navigation/RouteSegmentPlanner.kt")
+          segment_planner.write_text("""package ir.rahyar.app.core.navigation
+
+          import ir.rahyar.app.domain.models.ItineraryStop
+          import ir.rahyar.app.domain.models.LatLng
+          import ir.rahyar.app.domain.models.Route
+          import ir.rahyar.app.domain.models.StopStatus
+          import kotlin.math.atan2
+          import kotlin.math.cos
+          import kotlin.math.sin
+          import kotlin.math.sqrt
+
+          data class RouteSegmentSlice(
+              val index: Int,
+              val points: List<LatLng>
+          )
+
+          fun splitRouteByPendingStops(route: Route, stops: List<ItineraryStop>): List<RouteSegmentSlice> {
+              if (route.points.size < 2) return emptyList()
+              val pending = stops.filter { it.status == StopStatus.PENDING }.sortedBy { it.order }
+              if (pending.isEmpty()) return listOf(RouteSegmentSlice(0, route.points))
+
+              val cuts = mutableListOf<Int>()
+              var previous = 0
+              pending.forEach { stop ->
+                  val nearest = route.points.indices
+                      .filter { it >= previous }
+                      .minByOrNull { geoDistanceMeters(route.points[it], stop.location) }
+                      ?: return@forEach
+                  val cut = nearest.coerceIn((previous + 1).coerceAtMost(route.points.lastIndex), route.points.lastIndex)
+                  if (cut > previous && cut < route.points.lastIndex) {
+                      cuts += cut
+                      previous = cut
+                  }
+              }
+
+              val boundaries = listOf(0) + cuts.distinct() + listOf(route.points.lastIndex)
+              return boundaries.zipWithNext().mapIndexedNotNull { index, (start, end) ->
+                  if (end <= start) null else RouteSegmentSlice(index, route.points.subList(start, end + 1))
+              }
+          }
+
+          private fun geoDistanceMeters(a: LatLng, b: LatLng): Double {
+              val r = 6_371_000.0
+              val dLat = Math.toRadians(b.latitude - a.latitude)
+              val dLon = Math.toRadians(b.longitude - a.longitude)
+              val lat1 = Math.toRadians(a.latitude)
+              val lat2 = Math.toRadians(b.latitude)
+              val h = sin(dLat / 2) * sin(dLat / 2) + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2)
+              return r * 2 * atan2(sqrt(h), sqrt(1 - h))
+          }
+          """)
+
+          segment_test = Path("app/src/test/java/ir/rahyar/app/core/navigation/RouteSegmentPlannerTest.kt")
+          segment_test.write_text("""package ir.rahyar.app.core.navigation
+
+          import ir.rahyar.app.domain.models.ItineraryStop
+          import ir.rahyar.app.domain.models.LatLng
+          import ir.rahyar.app.domain.models.Route
+          import ir.rahyar.app.domain.models.RouteType
+          import ir.rahyar.app.domain.models.StopStatus
+          import ir.rahyar.app.domain.models.TransportMode
+          import org.junit.Assert.assertEquals
+          import org.junit.Assert.assertTrue
+          import org.junit.Test
+          import java.time.LocalDateTime
+
+          class RouteSegmentPlannerTest {
+              private val points = listOf(
+                  LatLng(35.830, 50.950), LatLng(35.830, 50.960), LatLng(35.830, 50.970),
+                  LatLng(35.830, 50.980), LatLng(35.830, 50.990), LatLng(35.830, 51.000)
+              )
+              private val route = Route(
+                  id = "segments", type = RouteType.RECOMMENDED, points = points,
+                  durationMinutes = 15, distanceKm = 5.0, eta = LocalDateTime.now(), transportMode = TransportMode.CAR
+              )
+
+              @Test fun twoPendingStopsProduceThreeIndependentSegments() {
+                  val stops = listOf(
+                      ItineraryStop("s1", LatLng(35.830, 50.970), 1, StopStatus.PENDING),
+                      ItineraryStop("s2", LatLng(35.830, 50.990), 2, StopStatus.PENDING)
+                  )
+                  val segments = splitRouteByPendingStops(route, stops)
+                  assertEquals(3, segments.size)
+                  assertEquals(points.first(), segments.first().points.first())
+                  assertEquals(points.last(), segments.last().points.last())
+                  assertTrue(segments.all { it.points.size >= 2 })
+                  assertEquals(segments[0].points.last(), segments[1].points.first())
+                  assertEquals(segments[1].points.last(), segments[2].points.first())
+              }
+
+              @Test fun arrivedOrSkippedStopsDoNotSplitActiveRoute() {
+                  val stops = listOf(
+                      ItineraryStop("done", LatLng(35.830, 50.970), 1, StopStatus.ARRIVED),
+                      ItineraryStop("skip", LatLng(35.830, 50.990), 2, StopStatus.SKIPPED)
+                  )
+                  assertEquals(1, splitRouteByPendingStops(route, stops).size)
+              }
+          }
+          """)
+
+          segment_text = active.read_text()
+          if "routeSegmentPolylines" not in segment_text:
+              segment_text = segment_text.replace(
+                  "    var routePolyline by remember { mutableStateOf<Polyline?>(null) }\n",
+                  "    var routePolyline by remember { mutableStateOf<Polyline?>(null) }\n    var routeSegmentPolylines by remember { mutableStateOf<List<Polyline>>(emptyList()) }\n",
+                  1
+              )
+              segment_text = segment_text.replace(
+                  "    LaunchedEffect(mapRef, active?.route?.id, zoomLevel) {",
+                  "    LaunchedEffect(mapRef, active?.route?.id, zoomLevel, session.itinerary?.stops) {",
+                  1
+              )
+              segment_text = segment_text.replace(
+                  "        routePolyline?.let(map::removePolyline)\n",
+                  "        routePolyline?.let(map::removePolyline)\n        routeSegmentPolylines.forEach { runCatching { map.removePolyline(it) } }\n        routeSegmentPolylines = emptyList()\n",
+                  1
+              )
+              route_old = """            routePolyline = map.addPolyline(
+                          PolylineOptions()
+                              .addAll(points)
+                              .color(AndroidColor.parseColor("#00D1D1"))
+                              .width(routeWidth)
+                      )"""
+              route_new = """            val segments = ir.rahyar.app.core.navigation.splitRouteByPendingStops(
+                          currentRoute,
+                          session.itinerary?.stops.orEmpty()
+                      )
+                      val segmentColors = listOf("#00D1D1", "#FFB020", "#8B5CF6", "#22C55E", "#EC4899")
+                      if (segments.size <= 1) {
+                          routePolyline = map.addPolyline(
+                              PolylineOptions()
+                                  .addAll(points)
+                                  .color(AndroidColor.parseColor("#00D1D1"))
+                                  .width(routeWidth)
+                          )
+                      } else {
+                          routePolyline = null
+                          routeSegmentPolylines = segments.map { segment ->
+                              map.addPolyline(
+                                  PolylineOptions()
+                                      .addAll(segment.points.map { MapLatLng(it.latitude, it.longitude) })
+                                      .color(AndroidColor.parseColor(segmentColors[segment.index % segmentColors.size]))
+                                      .width(routeWidth)
+                              )
+                          }
+                      }"""
+              if route_old not in segment_text:
+                  raise SystemExit("Run44 route segment render target not found")
+              segment_text = segment_text.replace(route_old, route_new, 1)
+              active.write_text(segment_text)
+
           waypoint_test = Path("app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt")
           wt = waypoint_test.read_text()
           extra = """
@@ -212,6 +364,10 @@ jobs:
           grep -q 'calculatePoiDetour' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
           grep -q 'unavailableBaseRouteNeverProducesFakeZeroDetour' app/src/test/java/ir/rahyar/app/core/navigation/PoiDetourTest.kt
           grep -q 'arrivingAtStopThenSelectingContinuationRouteKeepsFinalDestinationAndSessionAlive' app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt
+          grep -q 'splitRouteByPendingStops' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'routeSegmentPolylines' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'segmentColors' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'twoPendingStopsProduceThreeIndependentSegments' app/src/test/java/ir/rahyar/app/core/navigation/RouteSegmentPlannerTest.kt
 
       - name: Live speed-limit provider smoke
         shell: bash
