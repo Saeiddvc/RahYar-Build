@@ -1,0 +1,128 @@
+--- Run42Base/app/src/main/java/ir/rahyar/app/data/repository/RoadAwarenessRepositoryImpl.kt	1970-01-01 00:00:00.000000000 +0000
++++ Run43Source/app/src/main/java/ir/rahyar/app/data/repository/RoadAwarenessRepositoryImpl.kt	2026-08-31 04:30:48.591154721 +0000
+@@ -0,0 +1,14 @@
++package ir.rahyar.app.data.repository
++
++import ir.rahyar.app.data.remote.RoadAwarenessApi
++import ir.rahyar.app.domain.models.GeoPoint
++import ir.rahyar.app.domain.models.RoadAwarenessSnapshot
++import ir.rahyar.app.domain.models.Route
++import ir.rahyar.app.domain.repository.RoadAwarenessRepository
++
++class RoadAwarenessRepositoryImpl(
++    private val api: RoadAwarenessApi
++) : RoadAwarenessRepository {
++    override suspend fun getRoadAwareness(route: Route, currentLocation: GeoPoint): RoadAwarenessSnapshot =
++        api.getRoadAwareness(route, currentLocation)
++}
+diff -ruN Run42Base/app/src/main/java/ir/rahyar/app/di/AppModule.kt Run43Source/app/src/main/java/ir/rahyar/app/di/AppModule.kt
+--- Run42Base/app/src/main/java/ir/rahyar/app/di/AppModule.kt	2026-08-30 08:36:26.000000000 +0000
++++ Run43Source/app/src/main/java/ir/rahyar/app/di/AppModule.kt	2026-08-31 04:31:19.269876070 +0000
+@@ -10,18 +10,21 @@
+ import ir.rahyar.app.data.remote.HereTrafficApi
+ import ir.rahyar.app.data.remote.OpenMeteoWeatherApi
+ import ir.rahyar.app.data.remote.OrsDirectionsApi
++import ir.rahyar.app.data.remote.OverpassRoadAwarenessApi
+ import ir.rahyar.app.data.remote.OsrmDirectionsApi
+ import ir.rahyar.app.data.remote.TrafficApi
+ import ir.rahyar.app.data.remote.UnavailableTrafficApi
+ import ir.rahyar.app.data.repository.DestinationSearchRepositoryImpl
+ import ir.rahyar.app.data.repository.MapLibreOfflineMapRepository
+ import ir.rahyar.app.data.repository.RouteRepositoryImpl
++import ir.rahyar.app.data.repository.RoadAwarenessRepositoryImpl
+ import ir.rahyar.app.data.repository.TrafficRepositoryImpl
+ import ir.rahyar.app.data.repository.WeatherRepositoryImpl
+ import ir.rahyar.app.data.settings.SettingsRepositoryImpl
+ import ir.rahyar.app.domain.repository.DestinationSearchRepository
+ import ir.rahyar.app.domain.repository.OfflineMapRepository
+ import ir.rahyar.app.domain.repository.RouteRepository
++import ir.rahyar.app.domain.repository.RoadAwarenessRepository
+ import ir.rahyar.app.domain.repository.SettingsRepository
+ import ir.rahyar.app.domain.repository.TrafficRepository
+ import ir.rahyar.app.domain.repository.WeatherRepository
+@@ -65,6 +68,7 @@
+     )
+ 
+     fun provideWeatherRepository(): WeatherRepository = WeatherRepositoryImpl(OpenMeteoWeatherApi(http))
++    fun provideRoadAwarenessRepository(): RoadAwarenessRepository = RoadAwarenessRepositoryImpl(OverpassRoadAwarenessApi(http))
+     fun provideDestinationSearchRepository(context: Context): DestinationSearchRepository = DestinationSearchRepositoryImpl(context)
+     fun provideOfflineMapRepository(context: Context): OfflineMapRepository = MapLibreOfflineMapRepository(context)
+     fun provideSettingsRepository(context: Context): SettingsRepository = SettingsRepositoryImpl(context.settingsDataStore)
+diff -ruN Run42Base/app/src/main/java/ir/rahyar/app/domain/models/RoadAwareness.kt Run43Source/app/src/main/java/ir/rahyar/app/domain/models/RoadAwareness.kt
+--- Run42Base/app/src/main/java/ir/rahyar/app/domain/models/RoadAwareness.kt	1970-01-01 00:00:00.000000000 +0000
++++ Run43Source/app/src/main/java/ir/rahyar/app/domain/models/RoadAwareness.kt	2026-08-31 04:30:48.563731213 +0000
+@@ -0,0 +1,39 @@
++package ir.rahyar.app.domain.models
++
++enum class RoadEventType {
++    SPEED_CAMERA,
++    SPEED_BUMP,
++    HAZARD
++}
++
++data class RoadEvent(
++    val id: String,
++    val type: RoadEventType,
++    val location: GeoPoint,
++    val title: String,
++    val distanceAheadMeters: Int,
++    val source: String = "OSM"
++)
++
++data class RoadAwarenessSnapshot(
++    val speedLimitKmh: Int? = null,
++    val events: List<RoadEvent> = emptyList(),
++    val isLive: Boolean = false,
++    val source: String? = null
++)
++
++enum class DriverAlertKind {
++    APPROACHING_SPEED_LIMIT,
++    OVERSPEED,
++    SPEED_CAMERA,
++    SPEED_BUMP,
++    HAZARD,
++    OFF_ROUTE
++}
++
++data class DriverAlert(
++    val kind: DriverAlertKind,
++    val message: String,
++    val distanceMeters: Int? = null,
++    val priority: Int
++)
+diff -ruN Run42Base/app/src/main/java/ir/rahyar/app/domain/repository/RoadAwarenessRepository.kt Run43Source/app/src/main/java/ir/rahyar/app/domain/repository/RoadAwarenessRepository.kt
+--- Run42Base/app/src/main/java/ir/rahyar/app/domain/repository/RoadAwarenessRepository.kt	1970-01-01 00:00:00.000000000 +0000
++++ Run43Source/app/src/main/java/ir/rahyar/app/domain/repository/RoadAwarenessRepository.kt	2026-08-31 04:30:48.567154351 +0000
+@@ -0,0 +1,9 @@
++package ir.rahyar.app.domain.repository
++
++import ir.rahyar.app.domain.models.GeoPoint
++import ir.rahyar.app.domain.models.RoadAwarenessSnapshot
++import ir.rahyar.app.domain.models.Route
++
++interface RoadAwarenessRepository {
++    suspend fun getRoadAwareness(route: Route, currentLocation: GeoPoint): RoadAwarenessSnapshot
++}
+diff -ruN Run42Base/app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt Run43Source/app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt
+--- Run42Base/app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt	2026-08-31 04:16:32.000000000 +0000
++++ Run43Source/app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt	2026-08-31 04:31:19.270191970 +0000
+@@ -36,6 +36,7 @@
+ ) {
+     val navController = rememberNavController()
+     val providerManager = remember { AppModule.provideProviderManager() }
++    val roadAwarenessRepository = remember { AppModule.provideRoadAwarenessRepository() }
+ 
+     val searchFactory = remember(destinationSearchRepository) {
+         object : ViewModelProvider.Factory {
+@@ -110,6 +111,7 @@
+                 routeRepository = routeRepository,
+                 settingsRepository = settingsRepository,
+                 destinationSearchRepository = destinationSearchRepository,
++                roadAwarenessRepository = roadAwarenessRepository,
+                 navigationSession = navigationSession
+             )
+         }
+diff -ruN Run42Base/app/src/main/java/ir/rahyar/app/ui/components/NavigationHud.kt Run43Source/app/src/main/java/ir/rahyar/app/ui/components/NavigationHud.kt
+--- Run42Base/app/src/main/java/ir/rahyar/app/ui/components/NavigationHud.kt	2026-08-31 04:21:56.826004355 +0000
++++ Run43Source/app/src/main/java/ir/rahyar/app/ui/components/NavigationHud.kt	2026-08-31 04
