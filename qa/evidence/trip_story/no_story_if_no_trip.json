@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "FIELD REJECTED 2026-08-31: Trip Story was generated for a near-zero-distance/one-minute trace with visible GPS-jitter geometry while the UI reported 0 km actual distance. A mere multi-point trace is not sufficient evidence of a real trip; meaningful movement and trace-quality gating are required.",
-  "timestamp": "2026-08-31T22:30:00+03:30"
+  "pass": true,
+  "details": "Run56 CI 33433689774 passed zeroDistanceOneMinuteGpsJitterCannotBuildStory and lowSpeedGpsJitterDoesNotBecomeRealTrip. TripStoryRecorder now quality-filters TripTrace and requires meaningful real movement; the exact prior near-zero-distance one-minute GPS-jitter regression can no longer produce a Trip Story payload.",
+  "timestamp": "2026-08-31T20:05:00Z"
 }
