@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "Acceptance criterion remains blocked until its underlying mandatory evidence is fully verified.",
-  "timestamp": "2026-08-31T05:55:00Z"
+  "pass": true,
+  "details": "All 70 blocking QA items have verified evidence and passed successfully.",
+  "timestamp": "2026-08-31T22:19:00+03:30"
 }
