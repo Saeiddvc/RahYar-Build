@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run51 CI 33368538531 passed RoutePreviewSafetyTest.safeCameraPaddingReservesActualBottomOverlaySpace and compiled the map integration. Route overview fitting now consumes CameraPadding derived from the visible route sheet/sticky CTA and applies independent start/top/end/bottom insets.",
+  "timestamp": "2026-08-31T07:31:00Z"
+}
