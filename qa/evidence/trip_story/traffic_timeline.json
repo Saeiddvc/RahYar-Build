@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run52 CI 33375884732 passed trafficTimelineAcceptsLiveProviderDataOnly. Active navigation polls TrafficRepository and records segments only when TrafficInfo.isLive=true; non-live traffic is rejected.",
+  "timestamp": "2026-08-31T09:09:00Z"
+}
