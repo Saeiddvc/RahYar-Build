@@ -1,5 +1,5 @@
 {
   "pass": true,
-  "details": "Run54 typography contracts compile successfully, and final APK RahYar 1.7.0 was post-build verified with embedded IRANSans FaNum Regular/Medium/Bold. Trusted Run38 font-prefix SHA-256 values match exactly for all three weights; no fallback font is used by RahyarTypography.",
-  "timestamp": "2026-08-31T17:23:00Z"
+  "details": "Run55 compile/unit tests passed in CI 33432823023. The post-build Run55 APK candidate was patched with the trusted IRANSans FaNum Regular/Medium/Bold binaries from the accepted Run38 baseline. Prefix SHA-256 values match exactly: regular 413f480d..., medium 65eb55cc..., bold 1f4cb878.... The final candidate remains ZIP-valid and V2-signature-valid after font replacement.",
+  "timestamp": "2026-08-31T19:56:00Z"
 }
