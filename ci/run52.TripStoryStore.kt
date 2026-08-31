@@ -50,6 +50,41 @@ object TripStoryStore {
             .apply()
     }
 
+    fun load(context: Context): List<TripStoryRecord> {
+        val prefs = context.applicationContext
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_ITEMS, "[]") ?: "[]"
+        val array = runCatching { JSONArray(raw) }.getOrElse { JSONArray() }
+
+        return buildList {
+            for (index in 0 until array.length()) {
+                array.optJSONObject(index)?.toRecord()?.let(::add)
+            }
+        }
+    }
+
+    private fun JSONObject.toRecord(): TripStoryRecord? {
+        val tripId = optString("tripId").trim()
+        if (tripId.isBlank()) return null
+        return TripStoryRecord(
+            tripId = tripId,
+            startedAtMillis = optLong("startedAtMillis", 0L),
+            endedAtMillis = optLong("endedAtMillis", 0L),
+            actualDistanceKm = optDouble("actualDistanceKm", 0.0),
+            actualDurationMinutes = optInt("actualDurationMinutes", 0),
+            averageSpeedKmh = optDouble("averageSpeedKmh", 0.0),
+            maxSpeedKmh = optDouble("maxSpeedKmh", 0.0),
+            rerouteCount = optInt("rerouteCount", 0),
+            stopCount = optInt("stopCount", 0),
+            mediaCount = optInt("mediaCount", 0),
+            weatherEventCount = optInt("weatherEventCount", 0),
+            trafficEventCount = optInt("trafficEventCount", 0),
+            navigationRating =
+                if (has("navigationRating")) optInt("navigationRating")
+                else null
+        )
+    }
+
     private fun TripStoryRecord.toJson(): JSONObject =
         JSONObject().apply {
             put("tripId", tripId)
