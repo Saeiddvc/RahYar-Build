@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run51 CI 33368538531 passed malformedRoutesAreExcludedBeforeMapOrPreviewRendering and compile. Invalid/degenerate routes are filtered before route preview and map rendering; empty valid-route sets are handled without indexing assumptions.",
+  "timestamp": "2026-08-31T07:31:00Z"
+}
