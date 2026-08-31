@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run47 CI 33363937265 passed ProviderIntegrityTest: unavailable traffic cannot report live segments and absent weather samples cannot create live weather/timeline/alerts.",
+  "timestamp": "2026-08-31T06:25:00Z"
+}
