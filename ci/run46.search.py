@@ -76,7 +76,7 @@ fun rankSearchResults(
         .distinctBy {
             val lat = (it.location.latitude * 10_000).roundToInt()
             val lon = (it.location.longitude * 10_000).roundToInt()
-            "\${normalizePersianSearch(it.title)}|\$lat|\$lon"
+            "${normalizePersianSearch(it.title)}|$lat|$lon"
         }
         .map { result ->
             Scored(
@@ -195,9 +195,9 @@ repo = root / "app/src/main/java/ir/rahyar/app/data/repository/DestinationSearch
 text = repo.read_text()
 
 imports = [
-    ("import android.content.Context\\n", "import android.Manifest\\nimport android.content.Context\\nimport android.content.pm.PackageManager\\nimport android.location.LocationManager\\n"),
-    ("import ir.rahyar.app.domain.models.LatLng\\n", "import ir.rahyar.app.domain.models.LatLng\\nimport ir.rahyar.app.core.search.rankSearchResults\\n"),
-    ("import org.json.JSONArray\\n", "import org.json.JSONArray\\nimport org.json.JSONObject\\n"),
+    ("import android.content.Context\n", "import android.Manifest\nimport android.content.Context\nimport android.content.pm.PackageManager\nimport android.location.LocationManager\n"),
+    ("import ir.rahyar.app.domain.models.LatLng\n", "import ir.rahyar.app.domain.models.LatLng\nimport ir.rahyar.app.core.search.rankSearchResults\n"),
+    ("import org.json.JSONArray\n", "import org.json.JSONArray\nimport org.json.JSONObject\n"),
 ]
 for old, new in imports:
     if new.splitlines()[0] not in text:
@@ -254,8 +254,8 @@ search_impl = """    override suspend fun search(query: String): List<SearchResu
 
     private fun fetchPhoton(query: String, bias: LatLng?): List<SearchResult> {
         val encoded = URLEncoder.encode(query, Charsets.UTF_8.name())
-        val biasPart = bias?.let { "&lat=\${it.latitude}&lon=\${it.longitude}" }.orEmpty()
-        val url = URL("https://photon.komoot.io/api/?q=\$encoded&limit=16&lang=fa\$biasPart")
+        val biasPart = bias?.let { "&lat=${it.latitude}&lon=${it.longitude}" }.orEmpty()
+        val url = URL("https://photon.komoot.io/api/?q=$encoded&limit=16&lang=fa$biasPart")
         val json = JSONObject(readUrl(url, "RahYar/1.6.2 Android"))
         val features = json.optJSONArray("features") ?: JSONArray()
 
@@ -284,7 +284,7 @@ search_impl = """    override suspend fun search(query: String): List<SearchResu
 
                 add(
                     SearchResult(
-                        id = "photon_\${props.optString("osm_type")}_\${props.optString("osm_id", i.toString())}",
+                        id = "photon_${props.optString("osm_type")}_${props.optString("osm_id", i.toString())}",
                         title = title,
                         subtitle = subtitle.takeIf { it.isNotBlank() },
                         location = LatLng(lat, lon)
@@ -301,11 +301,11 @@ search_impl = """    override suspend fun search(query: String): List<SearchResu
             val east = it.longitude + 0.45
             val north = it.latitude + 0.35
             val south = it.latitude - 0.35
-            "&viewbox=\$west,\$north,\$east,\$south&bounded=0"
+            "&viewbox=$west,$north,$east,$south&bounded=0"
         }.orEmpty()
         val url = URL(
             "https://nominatim.openstreetmap.org/search" +
-                "?format=jsonv2&addressdetails=1&accept-language=fa&countrycodes=ir&limit=16\$viewbox&q=\$encoded"
+                "?format=jsonv2&addressdetails=1&accept-language=fa&countrycodes=ir&limit=16$viewbox&q=$encoded"
         )
         val array = JSONArray(readUrl(url, "RahYar/1.6.2 Android"))
 
@@ -320,7 +320,7 @@ search_impl = """    override suspend fun search(query: String): List<SearchResu
                     .ifBlank { continue }
                 add(
                     SearchResult(
-                        id = "nominatim_\${obj.optString("place_id", i.toString())}",
+                        id = "nominatim_${obj.optString("place_id", i.toString())}",
                         title = title,
                         subtitle = display.takeIf { it.isNotBlank() && it != title },
                         location = LatLng(lat, lon)
@@ -340,7 +340,7 @@ search_impl = """    override suspend fun search(query: String): List<SearchResu
         }
         try {
             if (connection.responseCode !in 200..299) {
-                error("Search HTTP \${connection.responseCode}")
+                error("Search HTTP ${connection.responseCode}")
             }
             return connection.inputStream.bufferedReader().use { it.readText() }
         } finally {
