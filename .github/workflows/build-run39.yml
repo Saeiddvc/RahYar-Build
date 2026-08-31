@@ -15,7 +15,7 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Run52 Compile + Unit Tests
+    name: Run53 Compile + Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -321,28 +321,58 @@ jobs:
           python3 ../ci/run50.maneuver-geometry.py
           python3 ../ci/run51.ui-safety.py
           python3 ../ci/run52.trip-story.py
+          python3 ../ci/run53.home-required.py
 
-          sed -i 's/versionCode = 21/versionCode = 30/' app/build.gradle.kts
-          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.8-run52-trip-story"/' app/build.gradle.kts
-          grep -q 'versionCode = 30' app/build.gradle.kts
-          grep -q 'versionName = "1.6.8-run52-trip-story"' app/build.gradle.kts
+          sed -i 's/versionCode = 21/versionCode = 31/' app/build.gradle.kts
+          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.9-run53-home-required"/' app/build.gradle.kts
+          grep -q 'versionCode = 31' app/build.gradle.kts
+          grep -q 'versionName = "1.6.9-run53-home-required"' app/build.gradle.kts
 
-      - name: Inspect Home required typography and quick settings
+      - name: Home dashboard and required UX checks
         working-directory: project
         shell: bash
         run: |
-          echo '--- HomeScreen ---'
-          sed -n '1,520p' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt || true
-          echo '--- Typography ---'
-          sed -n '1,300p' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt || true
-          echo '--- Font resources references ---'
-          grep -R -n 'R.font\|FontFamily\|Font(' app/src/main/java/ir/rahyar/app/ui app/src/main/java/ir/rahyar/app | head -n 180 || true
-          echo '--- Quick Settings block ---'
-          grep -n -A180 -B30 'تنظیمات سریع' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt || true
-          echo '--- Long press destination wiring ---'
-          grep -R -n -A90 -B20 'onLongPressDestination\|onMapLongClick\|setOnMapLongClickListener' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt || true
-          echo '--- Home navigation wiring ---'
-          grep -R -n -A160 -B40 'HomeScreen(' app/src/main/java/ir/rahyar/app/navigation app/src/main/java/ir/rahyar/app/ui/screens || true
+          set -euo pipefail
+
+          # Home / personal places / shortcuts.
+          grep -q 'requiredHomeServiceShortcuts' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
+          grep -q 'HomeServiceType.REST_AREA' app/src/main/java/ir/rahyar/app/core/home/HomeDashboard.kt
+          grep -q 'HomeServiceType.TOILET' app/src/main/java/ir/rahyar/app/core/home/HomeDashboard.kt
+          grep -q 'HomeServiceType.TOURISM' app/src/main/java/ir/rahyar/app/core/home/HomeDashboard.kt
+          grep -q 'PersonalPlacesStore.saveHome' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
+          grep -q 'PersonalPlacesStore.saveWork' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
+          grep -q 'PersonalPlacesStore.addSaved' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
+          grep -q 'destinationSearchRepository.recentDestinations' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
+          grep -q 'TripStoryStore.load' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
+          grep -q 'weatherRepository.getWeatherAlongRoute' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
+          grep -q 'trafficRepository.getTrafficForRoute' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
+          grep -q 'filterHomeServiceResults' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
+          grep -q 'requiredServiceShortcutsAreComplete' app/src/test/java/ir/rahyar/app/core/home/HomeDashboardContractTest.kt
+          grep -q 'remoteServiceResultsAreRejectedFromHome' app/src/test/java/ir/rahyar/app/core/home/HomeDashboardContractTest.kt
+          grep -q 'liveWeatherAndHeavyTrafficAreVisible' app/src/test/java/ir/rahyar/app/core/home/HomeDashboardContractTest.kt
+
+          # Required UX.
+          grep -q 'LocalLayoutDirection provides layoutDirection' app/src/main/java/ir/rahyar/app/ui/theme/Theme.kt
+          grep -q '"fa", "ar", "ku" -> LayoutDirection.Rtl' app/src/main/java/ir/rahyar/app/MainActivity.kt
+          grep -q 'horizontalScroll(rememberScrollState())' app/src/main/java/ir/rahyar/app/ui/components/PreNavigationComponents.kt
+          grep -q 'label = { Text(mode.labelFa(), maxLines = 1) }' app/src/main/java/ir/rahyar/app/ui/components/PreNavigationComponents.kt
+          grep -q 'addOnMapLongClickListener' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt
+          grep -q 'onLongPressDestination' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt
+          grep -q 'sheetVisibilityDoesNotChangeCameraFitKey' app/src/test/java/ir/rahyar/app/core/navigation/RoutePreviewSafetyTest.kt
+          grep -q 'rapidDoubleStartIsRejectedButRetryDoesNotFreeze' app/src/test/java/ir/rahyar/app/core/navigation/RoutePreviewSafetyTest.kt
+          grep -q 'malformedRoutesAreExcludedBeforeMapOrPreviewRendering' app/src/test/java/ir/rahyar/app/core/navigation/RoutePreviewSafetyTest.kt
+
+          # Persian number contract.
+          grep -q 'toPersianNumberText' app/src/main/java/ir/rahyar/app/core/format/PersianNumberFormatter.kt
+          grep -q "replace('.', '٫')" app/src/main/java/ir/rahyar/app/core/format/PersianNumberFormatter.kt
+          grep -q 'latinDigitsBecomePersianDigits' app/src/test/java/ir/rahyar/app/core/format/PersianNumberFormatterTest.kt
+          grep -q 'decimalSeparatorIsPersian' app/src/test/java/ir/rahyar/app/core/format/PersianNumberFormatterTest.kt
+
+          # Font source contract: exactly the three approved IRANSans resource families.
+          grep -q 'Font(R.font.iransans_regular, FontWeight.Normal)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
+          grep -q 'Font(R.font.iransans_medium, FontWeight.Medium)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
+          grep -q 'Font(R.font.iransans_bold, FontWeight.Bold)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
+          test "$(grep -R 'Font(R.font.' app/src/main/java/ir/rahyar/app/ui | grep -v 'iransans_' | wc -l)" -eq 0
 
       - name: Trip Story real-data checks
         working-directory: project
@@ -638,7 +668,7 @@ jobs:
       - name: Upload Run52 APK candidate
         uses: actions/upload-artifact@v4
         with:
-          name: RahYar-1.6.8-Run52-APK-Candidate
+          name: RahYar-1.6.9-Run53-APK-Candidate
           path: project/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
