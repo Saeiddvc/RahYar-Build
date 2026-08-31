@@ -15,7 +15,7 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Run56 Compile + Unit Tests
+    name: Run57 Compile + Unit Tests
     runs-on: ubuntu-latest
     env:
       HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
@@ -328,8 +328,8 @@ jobs:
           python3 ../ci/run55.field-quality.py
           python3 ../ci/run56.field-regression.py
 
-          sed -i 's/versionCode = 21/versionCode = 34/' app/build.gradle.kts
-          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.7.2-run56-final-regression"/' app/build.gradle.kts
+          sed -i 's/versionCode = 21/versionCode = 35/' app/build.gradle.kts
+          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.7.3-run57-final-font-structure"/' app/build.gradle.kts
           grep -q 'versionCode = 34' app/build.gradle.kts
           grep -q 'versionName = "1.7.2-run56-final-regression"' app/build.gradle.kts
 
@@ -401,9 +401,9 @@ jobs:
           grep -q 'decimalSeparatorIsPersian' app/src/test/java/ir/rahyar/app/core/format/PersianNumberFormatterTest.kt
 
           # Font source contract: exactly the three approved IRANSans resource families.
-          grep -q 'Font(R.font.iransans_fanum_regular, FontWeight.Normal)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
-          grep -q 'Font(R.font.iransans_fanum_medium, FontWeight.Medium)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
-          grep -q 'Font(R.font.iransans_fanum_bold, FontWeight.Bold)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
+          grep -q 'Font(R.font.iransans_fanum_regular, FontWeight.Normal)' app/src/main/java/ir/rahyar/app/ui/theme/Font.kt
+          grep -q 'Font(R.font.iransans_fanum_medium, FontWeight.Medium)' app/src/main/java/ir/rahyar/app/ui/theme/Font.kt
+          grep -q 'Font(R.font.iransans_fanum_bold, FontWeight.Bold)' app/src/main/java/ir/rahyar/app/ui/theme/Font.kt
           grep -q 'displayLarge = BaseTypography.displayLarge.copy(fontFamily = IranSansFaNum)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
           grep -q 'labelSmall = BaseTypography.labelSmall.copy(fontFamily = IranSansFaNum)' app/src/main/java/ir/rahyar/app/ui/theme/Typography.kt
           test "$(grep -R 'Font(R.font.' app/src/main/java/ir/rahyar/app/ui | grep -v 'iransans_fanum_' | wc -l)" -eq 0
@@ -692,7 +692,7 @@ jobs:
       - name: Upload Run55 APK candidate
         uses: actions/upload-artifact@v4
         with:
-          name: RahYar-1.7.2-Run56-APK-Candidate
+          name: RahYar-1.7.3-Run57-APK-Candidate
           path: project/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
