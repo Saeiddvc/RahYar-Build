@@ -1,0 +1,43 @@
+name: Export Run41 Source
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/export-run41-source.yml"
+
+permissions: { contents: read }
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct Run41 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat ci/source.part0.b64 ci/source.part1.b64 ci/source.part2.b64 ci/source.part3.b64 | base64 -d > /tmp/base.tar.zst
+          mkdir project
+          tar --zstd -xf /tmp/base.tar.zst -C project
+
+          cat ci/run40.diff.0 ci/run40.diff.1 > /tmp/run40.diff
+          cd project
+          patch -p1 < /tmp/run40.diff
+          patch -p1 < ../ci/run40.fix1.diff
+          cd ..
+
+          cat ci/run41b.diff.0 ci/run41b.diff.1 ci/run41b.diff.2 ci/run41b.diff.3 > /tmp/run41.diff
+          cd project
+          patch -p2 < /tmp/run41.diff
+          cd ..
+
+          tar --zstd -cf RahYar-Run41-Source.tar.zst -C project .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RahYar-Run41-Source
+          path: RahYar-Run41-Source.tar.zst
+          if-no-files-found: error
