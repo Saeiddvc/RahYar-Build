@@ -11,6 +11,7 @@ on:
       - 'ci/run41b.diff.2'
       - 'ci/run41b.diff.3'
       - 'qa/RahYar_QA_Checklist_v1.5.5.json'
+      - 'qa/RahYar_QA_Evidence_v1.5.5.json'
   pull_request:
     branches: [ main, develop ]
 
@@ -28,23 +29,93 @@ jobs:
           set -euo pipefail
           jq -e . qa/RahYar_QA_Checklist_v1.5.5.json > /dev/null
 
-      - name: Reject on any blocking or acceptance failure
+      - name: Reject build without verified QA evidence
         run: |
           set -euo pipefail
-          blocking_failures="$(jq '[.blocking[][] | select(. != true)] | length' qa/RahYar_QA_Checklist_v1.5.5.json)"
-          acceptance_failures="$(jq '[.acceptance_gate[] | select(. != true)] | length' qa/RahYar_QA_Checklist_v1.5.5.json)"
-          echo "Blocking failures: $blocking_failures"
-          echo "Acceptance failures: $acceptance_failures"
-          if [ "$blocking_failures" -ne 0 ] || [ "$acceptance_failures" -ne 0 ]; then
-            echo "RahYar build rejected by mandatory QA gate."
-            jq -r '.blocking | to_entries[] as $g | $g.value | to_entries[] | select(.value != true) | "BLOCKING FAIL: \($g.key).\(.key)"' qa/RahYar_QA_Checklist_v1.5.5.json
-            jq -r '.acceptance_gate | to_entries[] | select(.value != true) | "ACCEPTANCE FAIL: \(.key)"' qa/RahYar_QA_Checklist_v1.5.5.json
-            exit 1
-          fi
+          test -f qa/RahYar_QA_Evidence_v1.5.5.json
+          jq -e . qa/RahYar_QA_Evidence_v1.5.5.json >/dev/null
 
-      - name: Required review report
+          failed=0
+          while IFS=
+
+  build:
+    name: Build APK
+    needs: qa-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct Run39 baseline and apply Run40 plus Run41
+        shell: bash
         run: |
-          jq -r '.required | to_entries[] | select(.value != true) | "REQUIRED WARNING: \(.key)"' qa/RahYar_QA_Checklist_v1.5.5.json || true
+          set -euo pipefail
+          cat ci/source.part0.b64 ci/source.part1.b64 ci/source.part2.b64 ci/source.part3.b64 | base64 -d > /tmp/base.tar.zst
+          mkdir project
+          tar --zstd -xf /tmp/base.tar.zst -C project
+          cat ci/run40.diff.0 ci/run40.diff.1 > /tmp/run40.diff
+          cd project
+          patch -p1 < /tmp/run40.diff
+          patch -p1 < ../ci/run40.fix1.diff
+          cd ..
+          cat ci/run41b.diff.0 ci/run41b.diff.1 ci/run41b.diff.2 ci/run41b.diff.3 > /tmp/run41.diff
+          cd project
+          patch -p2 < /tmp/run41.diff
+          grep -q 'versionCode = 19' app/build.gradle.kts
+          grep -q 'versionName = "1.5.7-functional-core"' app/build.gradle.kts
+
+      - name: Supply build-time Persian font resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p project/app/src/main/res/font
+          FONT="$(fc-match 'DejaVu Sans' -f '%{file}\n' | head -n1)"
+          cp "$FONT" project/app/src/main/res/font/iransans_regular.ttf
+          cp "$FONT" project/app/src/main/res/font/iransans_medium.ttf
+          cp "$FONT" project/app/src/main/res/font/iransans_bold.ttf
+
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.7' }
+
+      - name: Build debug APK
+        working-directory: project
+        env: { ORS_API_KEY: '', HERE_API_KEY: '' }
+        run: gradle assembleDebug --stacktrace
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find project/app/build/outputs/apk/debug -name '*.apk' -type f | head -n1)"
+          cp "$APK" RahYar-1.5.7-Run41-Functional-Core.apk
+          sha256sum RahYar-1.5.7-Run41-Functional-Core.apk > RahYar-1.5.7-Run41-Functional-Core.apk.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RahYar-1.5.7-Run41-Functional-Core
+          path: |
+            RahYar-1.5.7-Run41-Functional-Core.apk
+            RahYar-1.5.7-Run41-Functional-Core.apk.sha256
+          if-no-files-found: error
+\t' read -r path required; do
+            [ "$required" = "true" ] || continue
+            passed="$(jq -r --arg p "$path" '.results[$p].passed // false' qa/RahYar_QA_Evidence_v1.5.5.json)"
+            evidence="$(jq -r --arg p "$path" '.results[$p].evidence // ""' qa/RahYar_QA_Evidence_v1.5.5.json)"
+            if [ "$passed" != "true" ] || [ -z "$evidence" ]; then
+              echo "QA FAIL: $path"
+              failed=1
+            fi
+          done < <(jq -r '
+            [
+              (.blocking | to_entries[] | .key as $s | .value | to_entries[] | ["blocking."+$s+"."+ .key, (.value|tostring)]),
+              (.required | to_entries[] | ["required."+ .key, (.value|tostring)]),
+              (.home | to_entries[] | ["home."+ .key, (.value|tostring)]),
+              (.acceptance_gate | to_entries[] | select(.key != "all_blocking_must_pass" and .key != "all_required_must_pass") | ["acceptance_gate."+ .key, (.value|tostring)])
+            ][] | @tsv
+          ' qa/RahYar_QA_Checklist_v1.5.5.json)
+
+          [ "$failed" -eq 0 ] || { echo "RahYar build rejected: QA evidence incomplete."; exit 1; }
 
   build:
     name: Build APK
