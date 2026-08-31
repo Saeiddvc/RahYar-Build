@@ -577,8 +577,19 @@ jobs:
           jq -e '.routes | length > 0' /tmp/ors-live.json >/dev/null
           echo "Authenticated ORS route succeeded."
 
+      - name: Require HERE Traffic credential
+        env:
+          HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$HERE_TRAFFIC_API_KEY" ]; then
+            echo "HERE_TRAFFIC_API_KEY is not configured. Final release is blocked."
+            exit 1
+          fi
+          echo "HERE_TRAFFIC_API_KEY is configured."
+
       - name: Live HERE Traffic authenticated smoke
-        if: ${{ env.HERE_TRAFFIC_API_KEY != '' }}
         env:
           HERE_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
           HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
