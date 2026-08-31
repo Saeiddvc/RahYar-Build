@@ -337,12 +337,19 @@ jobs:
         run: |
           echo '--- VEHICLE SYMBOL BLOCK ---'
           grep -n -A160 -B80 'VEHICLE_LAYER_ID' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt || true
+          echo '--- VEHICLE RUNTIME CALLS ---'
+          grep -n -A100 -B70 'ensureVehicleLayer(' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt || true
+          grep -n -A100 -B70 'ValueAnimator.ofFloat' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt || true
+          echo '--- MAP SETUP / STYLE ---'
+          grep -n -A160 -B50 'RahyarMapView' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt || true
           echo '--- TRACEPOINT MODEL ---'
           grep -n -A120 -B20 'data class TracePoint' app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt || true
           echo '--- TRACE APPEND ---'
-          grep -R -n -A80 -B30 'appendTracePoint' app/src/main/java/ir/rahyar/app | head -n 240 || true
+          grep -R -n -A100 -B40 'appendTracePoint' app/src/main/java/ir/rahyar/app | head -n 320 || true
           echo '--- ACTIVE ROUTE UNAVAILABLE UI ---'
-          grep -R -n -A80 -B20 'مسیر فعال در دسترس نیست' app/src/main/java/ir/rahyar/app || true
+          grep -R -n -A90 -B30 'مسیر فعال در دسترس نیست' app/src/main/java/ir/rahyar/app || true
+          echo '--- HOME OVERLAY MAP / LOCATION ---'
+          grep -n -A260 -B60 'HomeDashboardOverlay' app/src/main/java/ir/rahyar/app/ui/screens/HomeDashboardOverlay.kt || true
 
       - name: Home dashboard and required UX checks
         working-directory: project
