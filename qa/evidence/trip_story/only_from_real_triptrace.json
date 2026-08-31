@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run52 CI 33375884732 passed onlyRealTripTraceCanBuildStory plus compile/source gates. TripStoryRecorder.build accepts TripTrace and derives actual distance, duration, average/max speed from buildTripSummary(trace); Route is not a Trip Story input.",
+  "timestamp": "2026-08-31T09:09:00Z"
+}
