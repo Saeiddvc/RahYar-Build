@@ -343,6 +343,7 @@ new_stop = """        stopMarkers = session.itinerary?.stops.orEmpty()
                 icon?.let(options::icon)
                 map.addMarker(options)
             }
+    }
 """
 a = a[:stop_start] + new_stop + a[stop_end:]
 
