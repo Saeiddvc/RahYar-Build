@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "No verified automated evidence yet.",
-  "timestamp": "2026-08-31T07:43:02+03:30"
+  "pass": true,
+  "details": "Run44 CI 33362094438 passed RoutePoiFilterTest and source contract checks. POIs are filtered to a bounded route corridor with max distance from route.",
+  "timestamp": "2026-08-31T05:54:00Z"
 }
