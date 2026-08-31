@@ -318,18 +318,13 @@ a = a.replace(
     1
 )
 
-old_stop = """        val icon = runCatching { IconFactory.getInstance(context).fromResource(R.drawable.ic_stop_marker) }.getOrNull()
-        stopMarkers = session.itinerary?.stops.orEmpty()
-            .filter { it.status != ir.rahyar.app.domain.models.StopStatus.SKIPPED }
-            .sortedBy { it.order }
-            .map { stop ->
-                val options = MarkerOptions()
-                    .position(MapLatLng(stop.location.latitude, stop.location.longitude))
-                    .title("توقف " + faNumber(stop.order))
-                    .snippet(if (stop.status == ir.rahyar.app.domain.models.StopStatus.ARRIVED) "انجام شد" else "در انتظار")
-                icon?.let(options::icon)
-                map.addMarker(options)
-            }"""
+stop_start = a.find(
+    "        val icon = runCatching { IconFactory.getInstance(context).fromResource(R.drawable.ic_stop_marker) }.getOrNull()"
+)
+stop_end_marker = "\n    LaunchedEffect(mapRef, active?.roadEvents)"
+stop_end = a.find(stop_end_marker, stop_start)
+if stop_start < 0 or stop_end < 0:
+    raise SystemExit("Run55 stop marker target missing")
 new_stop = """        stopMarkers = session.itinerary?.stops.orEmpty()
             .filter { it.status != ir.rahyar.app.domain.models.StopStatus.SKIPPED }
             .sortedBy { it.order }
@@ -347,10 +342,9 @@ new_stop = """        stopMarkers = session.itinerary?.stops.orEmpty()
                     .snippet(if (arrived) "انجام شد" else "در انتظار")
                 icon?.let(options::icon)
                 map.addMarker(options)
-            }"""
-if old_stop not in a:
-    raise SystemExit("Run55 stop marker target missing")
-a = a.replace(old_stop, new_stop, 1)
+            }
+"""
+a = a[:stop_start] + new_stop + a[stop_end:]
 
 old_vehicle = """    if (style.getImage(VEHICLE_IMAGE_ID) == null) {
         drawableBitmap(context, R.drawable.ic_vehicle_marker)?.let { bitmap ->
