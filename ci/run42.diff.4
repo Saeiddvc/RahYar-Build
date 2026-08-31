@@ -1,0 +1,167 @@
+rtyFactory.iconAllowOverlap
++import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
++import org.maplibre.android.style.layers.PropertyFactory.iconImage
++import org.maplibre.android.style.layers.PropertyFactory.iconRotate
++import org.maplibre.android.style.layers.PropertyFactory.iconRotationAlignment
++import org.maplibre.android.style.layers.PropertyFactory.iconSize
++import org.maplibre.android.style.layers.SymbolLayer
++import org.maplibre.android.style.sources.GeoJsonSource
++import org.maplibre.geojson.Feature
++import org.maplibre.geojson.Point
+ import java.util.Locale
+ import kotlin.math.max
+ import kotlin.math.roundToInt
+@@ -152,7 +170,7 @@
+     var mapRef by remember { mutableStateOf<MapLibreMap?>(null) }
+     var routeUnderlay by remember { mutableStateOf<Polyline?>(null) }
+     var routePolyline by remember { mutableStateOf<Polyline?>(null) }
+-    var locationMarker by remember { mutableStateOf<Marker?>(null) }
++    val vehicleRenderState = remember { VehicleRenderState() }
+     var stopMarkers by remember { mutableStateOf<List<Marker>>(emptyList()) }
+     var zoomLevel by remember { mutableFloatStateOf(16.8f) }
+ 
+@@ -260,6 +278,7 @@
+ 
+     DisposableEffect(engine, voiceManager) {
+         onDispose {
++            vehicleRenderState.animator?.cancel()
+             engine.close()
+             voiceManager.shutdown()
+         }
+@@ -317,38 +336,61 @@
+         mapRef,
+         active?.currentLocation,
+         active?.bearing,
++        active?.speedKmh,
+         quickSettings.mapViewMode
+     ) {
+         val map = mapRef ?: return@LaunchedEffect
+-        val location = active?.currentLocation ?: return@LaunchedEffect
+-        val point = MapLatLng(location.latitude, location.longitude)
++        val current = active ?: return@LaunchedEffect
++        val location = current.currentLocation ?: return@LaunchedEffect
+ 
+-        val marker = locationMarker
+-        if (marker == null) {
+-            val markerOptions = MarkerOptions()
+-                .position(point)
+-                .title("موقعیت فعلی")
+-
+-            runCatching {
+-                IconFactory.getInstance(context)
+-                    .fromResource(R.drawable.ic_rahyar_arrow)
+-            }.getOrNull()?.let(markerOptions::icon)
++        ensureVehicleLayer(map, context, location, current.bearing)
+ 
+-            locationMarker = map.addMarker(markerOptions)
+-        } else {
+-            marker.position = point
++        val startLocation = vehicleRenderState.location ?: location
++        val startBearing = vehicleRenderState.bearing
++        vehicleRenderState.animator?.cancel()
++        vehicleRenderState.animator = ValueAnimator.ofFloat(0f, 1f).apply {
++            duration = 780L
++            interpolator = LinearInterpolator()
++            addUpdateListener { animator ->
++                val fraction = animator.animatedFraction
++                val interpolated = interpolateGeoPoint(startLocation, location, fraction)
++                val bearing = interpolateBearing(startBearing, current.bearing, fraction)
++                updateVehicleLayer(map, interpolated, bearing)
++                vehicleRenderState.location = interpolated
++                vehicleRenderState.bearing = bearing
++            }
++            start()
++        }
++
++        val speedMps = current.speedKmh / 3.6
++        val lookAheadMeters = (32.0 + speedMps * 4.2).coerceIn(32.0, 115.0)
++        val cameraTarget = forwardPoint(location, current.bearing, lookAheadMeters)
++        val cameraBearing = when (quickSettings.mapViewMode) {
++            MapViewMode.NORTH_UP -> 0.0
++            MapViewMode.HEADING_UP, MapViewMode.THREE_D -> current.bearing.toDouble()
++        }
++        val cameraTilt = when (quickSettings.mapViewMode) {
++            MapViewMode.NORTH_UP -> 0.0
++            MapViewMode.HEADING_UP -> 45.0
++            MapViewMode.THREE_D -> 60.0
++        }
++        val cameraZoom = when {
++            current.speedKmh >= 95.0 -> 16.2
++            current.speedKmh >= 60.0 -> 16.55
++            quickSettings.mapViewMode == MapViewMode.THREE_D -> 17.0
++            else -> 16.85
+         }
+ 
+         map.animateCamera(
+             CameraUpdateFactory.newCameraPosition(
+                 CameraPosition.Builder()
+-                    .target(point)
+-                    .bearing(if (quickSettings.mapViewMode == MapViewMode.NORTH_UP) 0.0 else (active?.bearing ?: 0f).toDouble())
+-                    .tilt(if (quickSettings.mapViewMode == MapViewMode.THREE_D) 58.0 else 0.0)
+-                    .zoom(if (quickSettings.mapViewMode == MapViewMode.THREE_D) 17.2 else 16.8)
++                    .target(MapLatLng(cameraTarget.latitude, cameraTarget.longitude))
++                    .bearing(cameraBearing)
++                    .tilt(cameraTilt)
++                    .zoom(cameraZoom)
+                     .build()
+             ),
+-            450
++            760
+         )
+     }
+ 
+@@ -755,6 +797,76 @@
+     }
+ }
+ 
++
++private const val VEHICLE_SOURCE_ID = "rahyar-vehicle-source"
++private const val VEHICLE_LAYER_ID = "rahyar-vehicle-layer"
++private const val VEHICLE_IMAGE_ID = "rahyar-vehicle-image"
++
++private class VehicleRenderState(
++    var location: LatLng? = null,
++    var bearing: Float = 0f,
++    var animator: ValueAnimator? = null
++)
++
++private fun ensureVehicleLayer(
++    map: MapLibreMap,
++    context: android.content.Context,
++    location: LatLng,
++    bearing: Float
++) {
++    val style = map.style ?: return
++    if (style.getImage(VEHICLE_IMAGE_ID) == null) {
++        drawableBitmap(context, R.drawable.ic_vehicle_marker)?.let { bitmap ->
++            style.addImage(VEHICLE_IMAGE_ID, bitmap)
++        }
++    }
++
++    if (style.getSource(VEHICLE_SOURCE_ID) == null) {
++        style.addSource(
++            GeoJsonSource(
++                VEHICLE_SOURCE_ID,
++                vehicleFeature(location, bearing)
++            )
++        )
++    }
++
++    if (style.getLayer(VEHICLE_LAYER_ID) == null) {
++        style.addLayer(
++            SymbolLayer(VEHICLE_LAYER_ID, VEHICLE_SOURCE_ID).withProperties(
++                iconImage(VEHICLE_IMAGE_ID),
++                iconAllowOverlap(true),
++                iconIgnorePlacement(true),
++                iconRotationAlignment("map"),
++                iconRotate(get("bearing")),
++                iconSize(0.78f)
++            )
++        )
++    }
++
++    updateVehicleLayer(map, location, bearing)
++}
++
++private fun updateVehicleLayer(map: MapLibreMap, location: LatLng, bearing: Float) {
++    val sourc
