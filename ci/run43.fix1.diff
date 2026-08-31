@@ -1,8 +1,7 @@
-
-diff -ruN Run43Source/app/src/test/java/ir/rahyar/app/core/navigation/DriverAlertEvaluatorTest.kt Run43Fixed/app/src/test/java/ir/rahyar/app/core/navigation/DriverAlertEvaluatorTest.kt
---- Run43Source/app/src/test/java/ir/rahyar/app/core/navigation/DriverAlertEvaluatorTest.kt	2026-08-31 04:31:37.735917266 +0000
-+++ Run43Fixed/app/src/test/java/ir/rahyar/app/core/navigation/DriverAlertEvaluatorTest.kt	2026-08-31 05:10:00.000000000 +0000
-@@ -42,3 +42,23 @@
+--- a/app/src/test/java/ir/rahyar/app/core/navigation/DriverAlertEvaluatorTest.kt
++++ b/app/src/test/java/ir/rahyar/app/core/navigation/DriverAlertEvaluatorTest.kt
+@@ -41,4 +41,25 @@
+         val alert = evaluateDriverAlert(120.0, 80, listOf(event), true)
          assertEquals(DriverAlertKind.OFF_ROUTE, alert?.kind)
      }
 +
