@@ -1,5 +1,5 @@
 {
-  "pass": true,
-  "details": "Run49 CI 33365704532 passed source contracts and compile. ActiveNavigation uses a MapLibre SymbolLayer with R.drawable.ic_vehicle_marker and no locationMarker/static-pin state remains for the live vehicle.",
-  "timestamp": "2026-08-31T06:52:00Z"
+  "pass": false,
+  "details": "FIELD REJECTED 2026-08-31: device screenshots during active navigation still show classic red pin markers and no unambiguous vehicle/car symbol at the live position. Source-level SymbolLayer evidence is insufficient; this item is blocked until a field build visibly renders the vehicle icon at the tracked position.",
+  "timestamp": "2026-08-31T22:30:00+03:30"
 }
