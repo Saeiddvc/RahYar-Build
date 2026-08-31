@@ -1,0 +1,78 @@
+name: RahYar QA Gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main", "develop" ]
+    paths:
+      - "qa/**"
+      - ".github/workflows/qa-gate.yml"
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  qa-gate:
+    name: Run RahYar QA Checklist
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Validate Checklist JSON
+        run: |
+          set -euo pipefail
+          jq -e . ./qa/RahYar_QA_Checklist_v1.5.5.json > /dev/null
+
+      - name: Validate Blocking Items
+        run: |
+          set -euo pipefail
+          failed=0
+          echo "Checking Blocking Items..."
+          while IFS= read -r path; do
+            value="$(jq -r "$path" ./qa/RahYar_QA_Checklist_v1.5.5.json)"
+            if [ "$value" != "true" ]; then
+              echo "BLOCKING FAILED: $path"
+              failed=1
+            else
+              echo "PASS: $path"
+            fi
+          done < <(jq -r '.blocking | to_entries[] as $g | $g.value | keys[] | ".blocking.($g.key).(.)"' ./qa/RahYar_QA_Checklist_v1.5.5.json)
+          [ "$failed" -eq 0 ] || { echo "QA Gate FAILED — Blocking items not satisfied."; exit 1; }
+
+      - name: Validate Required Items
+        run: |
+          set -euo pipefail
+          failed=0
+          echo "Checking Required Items..."
+          while IFS= read -r item; do
+            value="$(jq -r ".required.$item" ./qa/RahYar_QA_Checklist_v1.5.5.json)"
+            if [ "$value" != "true" ]; then
+              echo "REQUIRED WARNING: $item"
+              failed=1
+            else
+              echo "PASS: $item"
+            fi
+          done < <(jq -r '.required | keys[]' ./qa/RahYar_QA_Checklist_v1.5.5.json)
+          if [ "$failed" -eq 1 ]; then
+            echo "Required items have warnings — review required."
+          fi
+
+      - name: Validate Acceptance Gate
+        run: |
+          set -euo pipefail
+          failed=0
+          echo "Checking Acceptance Gate..."
+          while IFS= read -r item; do
+            value="$(jq -r ".acceptance_gate.$item" ./qa/RahYar_QA_Checklist_v1.5.5.json)"
+            if [ "$value" != "true" ]; then
+              echo "ACCEPTANCE FAILED: $item"
+              failed=1
+            else
+              echo "PASS: $item"
+            fi
+          done < <(jq -r '.acceptance_gate | keys[]' ./qa/RahYar_QA_Checklist_v1.5.5.json)
+          [ "$failed" -eq 0 ] || { echo "QA Gate FAILED — Acceptance Gate not satisfied."; exit 1; }
+
+      - name: Final Result
+        run: echo "RahYar QA Gate PASSED — Build Approved."
