@@ -15,7 +15,7 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Run45 Compile + Unit Tests
+    name: Run46 Compile + Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -314,11 +314,12 @@ jobs:
           PY
 
           python3 ../ci/run45.weather.py
+          python3 ../ci/run46.search.py
 
-          sed -i 's/versionCode = 21/versionCode = 23/' app/build.gradle.kts
-          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.1-run45-weather"/' app/build.gradle.kts
-          grep -q 'versionCode = 23' app/build.gradle.kts
-          grep -q 'versionName = "1.6.1-run45-weather"' app/build.gradle.kts
+          sed -i 's/versionCode = 21/versionCode = 24/' app/build.gradle.kts
+          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.2-run46-search"/' app/build.gradle.kts
+          grep -q 'versionCode = 24' app/build.gradle.kts
+          grep -q 'versionName = "1.6.2-run46-search"' app/build.gradle.kts
 
       - name: GPS core source contract checks
         working-directory: project
@@ -370,6 +371,31 @@ jobs:
           grep -q 'routeSegmentPolylines' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
           grep -q 'segmentColors' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
           grep -q 'twoPendingStopsProduceThreeIndependentSegments' app/src/test/java/ir/rahyar/app/core/navigation/RouteSegmentPlannerTest.kt
+
+      - name: Search quality source contract checks
+        working-directory: project
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'photon.komoot.io' app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
+          grep -q 'fetchNominatim' app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
+          grep -q 'lastKnownBias' app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
+          grep -q 'rankSearchResults' app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
+          grep -q 'normalizePersianSearch' app/src/main/java/ir/rahyar/app/core/search/SearchRanking.kt
+          grep -q 'persianSemanticScore' app/src/main/java/ir/rahyar/app/core/search/SearchRanking.kt
+          grep -q 'irrelevantRandomResultIsRejected' app/src/test/java/ir/rahyar/app/core/search/SearchRankingTest.kt
+          grep -q 'closerResultWinsWhenSemanticBucketIsEqual' app/src/test/java/ir/rahyar/app/core/search/SearchRankingTest.kt
+
+      - name: Live Photon and Nominatim smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 2 --max-time 35             -A 'RahYar/1.6.2 Android'             'https://photon.komoot.io/api/?q=Tehran&limit=2&lang=en&lat=35.7&lon=51.4'             > /tmp/photon.json
+          jq -e '.features | type == "array"' /tmp/photon.json >/dev/null
+
+          curl --fail --silent --show-error --retry 2 --max-time 35             -A 'RahYar/1.6.2 Android'             'https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=ir&limit=1&q=Tehran'             > /tmp/nominatim.json
+          jq -e 'type == "array"' /tmp/nominatim.json >/dev/null
+          echo "Photon primary and Nominatim fallback providers responded."
 
       - name: Weather awareness source contract checks
         working-directory: project
