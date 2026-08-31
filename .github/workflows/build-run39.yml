@@ -325,6 +325,17 @@ jobs:
           grep -q 'versionCode = 28' app/build.gradle.kts
           grep -q 'versionName = "1.6.6-run50-maneuver-geometry"' app/build.gradle.kts
 
+      - name: Inspect route preview UI contracts
+        working-directory: project
+        shell: bash
+        run: |
+          echo '--- RouteSelectionScreen.kt ---'
+          sed -n '1,320p' app/src/main/java/ir/rahyar/app/ui/screens/RouteSelectionScreen.kt || true
+          echo '--- RoutePreviewSheet.kt ---'
+          sed -n '1,360p' app/src/main/java/ir/rahyar/app/ui/components/RoutePreviewSheet.kt || true
+          echo '--- RahyarMapScreen route preview section ---'
+          grep -n -A180 -B40 'RoutePreview' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt || true
+
       - name: Maneuver distance geometry checks
         working-directory: project
         shell: bash
