@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "Acceptance criterion remains blocked until its underlying mandatory evidence is fully verified.",
-  "timestamp": "2026-08-31T05:55:00Z"
+  "pass": true,
+  "details": "Final APK font resources were verified against trusted Run38 IRANSans FaNum hashes for Regular/Medium/Bold, and Run54 RahyarTypography maps all Material3 text styles to IranSansFaNum.",
+  "timestamp": "2026-08-31T17:23:00Z"
 }
