@@ -1,5 +1,5 @@
 {
   "pass": true,
-  "details": "Run54 CI 33418655742 passed decimalSeparatorIsPersian: 1913.1 formats as ۱۹۱۳٫۱ and contains no Latin decimal point.",
-  "timestamp": "2026-08-31T17:23:00Z"
+  "details": "Run55 CI 33432823023 passed decimalSeparatorIsPersian; 1913.1 formats as ۱۹۱۳٫۱ with Persian decimal separator U+066B and no Latin dot.",
+  "timestamp": "2026-08-31T19:56:00Z"
 }
