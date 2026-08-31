@@ -81,257 +81,257 @@ diff -ruN base/app/src/main/java/ir/rahyar/app/core/navigation/RoutePoiFilter.kt
 +    val h = sin(dLat / 2) * sin(dLat / 2) + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2)
 +    return r * 2 * atan2(sqrt(h), sqrt(1 - h))
 +}
-+diff -ruN base/app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt work/app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
-+--- base/app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt	2026-08-31 04:16:32.000000000 +0000
-++++ work/app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt	2026-08-31 05:42:10.196856206 +0000
-+@@ -7,6 +7,8 @@
-+ import ir.rahyar.app.domain.models.PoiType
-+ import ir.rahyar.app.domain.models.Route
-+ import ir.rahyar.app.domain.models.SearchResult
-++import ir.rahyar.app.core.navigation.aheadRouteWindow
-++import ir.rahyar.app.core.navigation.matchPoiToAheadRoute
-+ import ir.rahyar.app.domain.repository.DestinationSearchRepository
-+ import kotlinx.coroutines.Dispatchers
-+ import kotlinx.coroutines.withContext
-+@@ -102,10 +104,12 @@
-+     ): List<Poi> = withContext(Dispatchers.IO) {
-+         if (route.points.size < 2) return@withContext emptyList()
-+ 
-+-        val minLat = route.points.minOf { it.latitude } - 0.035
-+-        val maxLat = route.points.maxOf { it.latitude } + 0.035
-+-        val minLng = route.points.minOf { it.longitude } - 0.045
-+-        val maxLng = route.points.maxOf { it.longitude } + 0.045
-++        val corridor = aheadRouteWindow(route, currentLocation, maxAheadMeters = 25_000.0)
-++        if (corridor.size < 2) return@withContext emptyList()
-++        val minLat = corridor.minOf { it.latitude } - 0.012
-++        val maxLat = corridor.maxOf { it.latitude } + 0.012
-++        val minLng = corridor.minOf { it.longitude } - 0.015
-++        val maxLng = corridor.maxOf { it.longitude } + 0.015
-+         val encoded = URLEncoder.encode(query.trim(), Charsets.UTF_8.name())
-+         val viewbox = "$minLng,$maxLat,$maxLng,$minLat"
-+         val url = URL(
-+@@ -123,17 +127,20 @@
-+             if (connection.responseCode !in 200..299) return@withContext emptyList()
-+             val body = connection.inputStream.bufferedReader().use { it.readText() }
-+             val array = JSONArray(body)
-+-            val currentIndex = nearestRouteIndex(route, currentLocation)
-+             buildList {
-+                 for (i in 0 until array.length()) {
-+                     val obj = array.getJSONObject(i)
-+                     val lat = obj.optString("lat").toDoubleOrNull() ?: continue
-+                     val lon = obj.optString("lon").toDoubleOrNull() ?: continue
-+                     val point = LatLng(lat, lon)
-+-                    val nearestIndex = nearestRouteIndex(route, point)
-+-                    val distanceFromRoute = distanceMeters(point, route.points[nearestIndex]).roundToInt()
-+-                    val ahead = nearestIndex + 2 >= currentIndex
-+-                    if (!ahead || distanceFromRoute > 3500) continue
-++                    val match = matchPoiToAheadRoute(
-++                        route = route,
-++                        currentLocation = currentLocation,
-++                        poiLocation = point,
-++                        maxDistanceFromRouteMeters = 1_200.0,
-++                        maxAheadMeters = 25_000.0
-++                    ) ?: continue
-++                    val distanceFromRoute = match.distanceFromRouteMeters
-+                     val display = obj.optString("display_name").trim()
-+                     val name = obj.optString("name").trim().ifBlank { display.substringBefore(',').trim().ifBlank { query } }
-+                     add(
-+@@ -145,7 +152,7 @@
-+                             distanceFromRouteMeters = distanceFromRoute,
-+                             detourDistanceMeters = 0,
-+                             detourDurationMinutes = 0,
-+-                            isAheadOfUser = true,
-++                            isAheadOfUser = match.isAheadOfUser,
-+                             isOpenNow = null,
-+                             reliability = PoiReliability.UNKNOWN
-+                         )
-+@@ -204,17 +211,4 @@
-+             .apply()
-+     }
-+ 
-+-
-+-    private fun nearestRouteIndex(route: Route, point: LatLng): Int =
-+-        route.points.indices.minByOrNull { distanceMeters(route.points[it], point) } ?: 0
-+-
-+-    private fun distanceMeters(a: LatLng, b: LatLng): Double {
-+-        val r = 6371000.0
-+-        val p1 = Math.toRadians(a.latitude)
-+-        val p2 = Math.toRadians(b.latitude)
-+-        val dp = Math.toRadians(b.latitude - a.latitude)
-+-        val dl = Math.toRadians(b.longitude - a.longitude)
-+-        val h = sin(dp / 2).pow(2) + cos(p1) * cos(p2) * sin(dl / 2).pow(2)
-+-        return 2 * r * atan2(sqrt(h), sqrt(1 - h))
-+-    }
-+ }
-+diff -ruN base/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt work/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt
-+--- base/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt	2026-08-31 04:16:32.000000000 +0000
-++++ work/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt	2026-08-31 05:42:10.197138420 +0000
-+@@ -140,7 +140,15 @@
-+     fun updateStopStatus(id: String, status: StopStatus) {
-+         _state.update { current ->
-+             val itinerary = current.itinerary ?: return@update current
-+-            current.copy(itinerary = itinerary.copy(stops = itinerary.stops.map { if (it.id == id) it.copy(status = status) else it }))
-++            val updatedStops = itinerary.stops.map { stop ->
-++                if (stop.id != id) return@map stop
-++                when {
-++                    stop.status == status -> stop
-++                    stop.status == StopStatus.PENDING && status in setOf(StopStatus.ARRIVED, StopStatus.SKIPPED) -> stop.copy(status = status)
-++                    else -> stop
-++                }
-++            }
-++            current.copy(itinerary = itinerary.copy(stops = updatedStops))
-+         }
-+     }
-+ 
-+diff -ruN base/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt work/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
-+--- base/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt	2026-08-31 04:16:32.000000000 +0000
-++++ work/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt	2026-08-31 05:42:10.197760375 +0000
-+@@ -489,14 +489,15 @@
-+                                                 val base = routeRepository.getRoutes(current, destination, session.transportMode, session.waypoints)
-+                                                     .filter { it.distanceKm > 0.0 && it.durationMinutes > 0 }
-+                                                     .minByOrNull { it.durationMinutes }
-+-                                                raw.take(5).map { poi ->
-++                                                val baseline = base ?: error("مسیر پایه برای محاسبه انحراف در دسترس نیست")
-++                                                raw.take(8).mapNotNull { poi ->
-+                                                     val withStop = routeRepository.getRoutes(current, destination, session.transportMode, session.waypoints + poi.location)
-+                                                         .filter { it.distanceKm > 0.0 && it.durationMinutes > 0 }
-+-                                                        .minByOrNull { it.durationMinutes }
-+-                                                    if (base != null && withStop != null) poi.copy(
-+-                                                        detourDistanceMeters = ((withStop.distanceKm - base.distanceKm).coerceAtLeast(0.0) * 1000).roundToInt(),
-+-                                                        detourDurationMinutes = (withStop.durationMinutes - base.durationMinutes).coerceAtLeast(0)
-+-                                                    ) else poi
-++                                                        .minByOrNull { it.durationMinutes } ?: return@mapNotNull null
-++                                                    poi.copy(
-++                                                        detourDistanceMeters = ((withStop.distanceKm - baseline.distanceKm).coerceAtLeast(0.0) * 1000).roundToInt(),
-++                                                        detourDurationMinutes = (withStop.durationMinutes - baseline.durationMinutes).coerceAtLeast(0)
-++                                                    )
-+                                                 }.sortedWith(compareBy<Poi> { it.detourDurationMinutes }.thenBy { it.distanceFromRouteMeters })
-+                                             }.onSuccess { poiResults = it }
-+                                                 .onFailure { poiError = "دریافت خدمات میان‌راه انجام نشد" }
-+diff -ruN base/app/src/test/java/ir/rahyar/app/core/navigation/RoutePoiFilterTest.kt work/app/src/test/java/ir/rahyar/app/core/navigation/RoutePoiFilterTest.kt
-+--- base/app/src/test/java/ir/rahyar/app/core/navigation/RoutePoiFilterTest.kt	1970-01-01 00:00:00.000000000 +0000
-++++ work/app/src/test/java/ir/rahyar/app/core/navigation/RoutePoiFilterTest.kt	2026-08-31 05:42:10.198267808 +0000
-+@@ -0,0 +1,55 @@
-++package ir.rahyar.app.core.navigation
-++
-++import ir.rahyar.app.domain.models.LatLng
-++import ir.rahyar.app.domain.models.Route
-++import ir.rahyar.app.domain.models.RouteType
-++import ir.rahyar.app.domain.models.TransportMode
-++import org.junit.Assert.assertNotNull
-++import org.junit.Assert.assertNull
-++import org.junit.Assert.assertTrue
-++import org.junit.Test
-++import java.time.LocalDateTime
-++
-++class RoutePoiFilterTest {
-++    private fun route(): Route = Route(
-++        id = "karaj-hesarak",
-++        type = RouteType.RECOMMENDED,
-++        points = listOf(
-++            LatLng(35.8320, 50.9490),
-++            LatLng(35.8300, 50.9700),
-++            LatLng(35.8290, 50.9900),
-++            LatLng(35.8280, 51.0100)
-++        ),
-++        durationMinutes = 18,
-++        distanceKm = 7.0,
-++        eta = LocalDateTime.now(),
-++        transportMode = TransportMode.CAR
-++    )
-++
-++    @Test fun aheadNearRouteIsAccepted() {
-++        val match = matchPoiToAheadRoute(route(), LatLng(35.8318, 50.9492), LatLng(35.8291, 50.9902))
-++        assertNotNull(match)
-++        assertTrue(match!!.isAheadOfUser)
-++        assertTrue(match.distanceFromRouteMeters < 100)
-++    }
-++
-++    @Test fun farOffRouteIsRejected() {
-++        assertNull(matchPoiToAheadRoute(route(), LatLng(35.8318, 50.9492), LatLng(35.90, 51.15)))
-++    }
-++
-++    @Test fun behindUserIsRejected() {
-++        val current = LatLng(35.8289, 50.9901)
-++        val behind = LatLng(35.8319, 50.9491)
-++        assertNull(matchPoiToAheadRoute(route(), current, behind, maxDistanceFromRouteMeters = 1_200.0))
-++    }
-++
-++    @Test fun remoteZarandCandidateIsRejected() {
-++        val zarandKerman = LatLng(30.8120, 56.5630)
-++        assertNull(matchPoiToAheadRoute(route(), LatLng(35.8318, 50.9492), zarandKerman))
-++    }
-++
-++    @Test fun aheadWindowDoesNotIncludeWholeRemoteRoute() {
-++        val points = aheadRouteWindow(route(), LatLng(35.8318, 50.9492), maxAheadMeters = 2_500.0)
-++        assertTrue(points.size in 2..3)
-++    }
-++}
-+diff -ruN base/app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt work/app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt
-+--- base/app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt	1970-01-01 00:00:00.000000000 +0000
-++++ work/app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt	2026-08-31 05:42:10.198355660 +0000
-+@@ -0,0 +1,64 @@
-++package ir.rahyar.app.navigation
-++
-++import ir.rahyar.app.domain.models.LatLng
-++import ir.rahyar.app.domain.models.Route
-++import ir.rahyar.app.domain.models.RouteType
-++import ir.rahyar.app.domain.models.StopStatus
-++import ir.rahyar.app.domain.models.TransportMode
-++import org.junit.Assert.assertEquals
-++import org.junit.Assert.assertTrue
-++import org.junit.Test
-++import java.time.LocalDateTime
-++
-++class NavigationSessionWaypointTest {
-++    private fun route(id: String) = Route(
-++        id = id, type = RouteType.RECOMMENDED,
-++        points = listOf(LatLng(35.83, 50.95), LatLng(35.82, 51.00)),
-++        durationMinutes = 10, distanceKm = 5.0, eta = LocalDateTime.now(), transportMode = TransportMode.CAR
-++    )
-++
-++    @Test fun addingStopPreservesOriginalDestinationAndUsesItinerary() {
-++        val session = NavigationSession()
-++        val origin = LatLng(35.83, 50.95)
-++        val destination = LatLng(35.82, 51.00)
-++        val stop = LatLng(35.825, 50.98)
-++        session.setOrigin(origin)
-++        session.setDestination(destination)
-++        session.addStop(stop, "fuel-1")
-++        val state = session.state.value
-++        assertEquals(destination, state.destination)
-++        assertEquals(destination, state.itinerary?.destination)
-++        assertEquals(1, state.itinerary?.stops?.size)
-++        assertEquals(StopStatus.PENDING, state.itinerary?.stops?.single()?.status)
-++    }
-++
-++    @Test fun stopStatusCannotRegressFromArrived() {
-++        val session = NavigationSession()
-++        session.setOrigin(LatLng(35.83, 50.95))
-++        session.setDestination(LatLng(35.82, 51.00))
-++        session.addStop(LatLng(35.825, 50.98), "s1")
-++        session.updateStopStatus("s1", StopStatus.ARRIVED)
-++        session.updateStopStatus("s1", StopStatus.PENDING)
-++        assertEquals(StopStatus.ARRIVED, session.state.value.itinerary?.stops?.single()?.status)
-++    }
-++
-++    @Test fun skippedStopLeavesDestinationAndIsRemovedFromPendingWaypoints() {
-++        val session = NavigationSession()
-++        val destination = LatLng(35.82, 51.00)
-++        session.setOrigin(LatLng(35.83, 50.95))
-++        session.setDestination(destination)
-++        session.addStop(LatLng(35.825, 50.98), "s1")
-++        session.updateStopStatus("s1", StopStatus.SKIPPED)
-++        assertEquals(destination, session.state.value.destination)
-++        assertTrue(session.state.value.waypoints.isEmpty())
-++    }
-++
-++    @Test fun selectingRerouteWhileNavigatingDoesNotEndSession() {
-++        val session = NavigationSession()
-++        session.setOrigin(LatLng(35.83, 50.95))
-++        session.setDestination(LatLng(35.82, 51.00))
-++        session.beginNavigation(route("r1"))
-++        session.selectRoute(route("r2"))
-++        assertTrue(session.state.value.navigationState is NavigationState.Navigating)
-++    }
-++}
+diff -ruN base/app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt work/app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
+--- base/app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt	2026-08-31 04:16:32.000000000 +0000
++++ work/app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt	2026-08-31 05:42:10.196856206 +0000
+@@ -7,6 +7,8 @@
+ import ir.rahyar.app.domain.models.PoiType
+ import ir.rahyar.app.domain.models.Route
+ import ir.rahyar.app.domain.models.SearchResult
++import ir.rahyar.app.core.navigation.aheadRouteWindow
++import ir.rahyar.app.core.navigation.matchPoiToAheadRoute
+ import ir.rahyar.app.domain.repository.DestinationSearchRepository
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.withContext
+@@ -102,10 +104,12 @@
+     ): List<Poi> = withContext(Dispatchers.IO) {
+         if (route.points.size < 2) return@withContext emptyList()
+ 
+-        val minLat = route.points.minOf { it.latitude } - 0.035
+-        val maxLat = route.points.maxOf { it.latitude } + 0.035
+-        val minLng = route.points.minOf { it.longitude } - 0.045
+-        val maxLng = route.points.maxOf { it.longitude } + 0.045
++        val corridor = aheadRouteWindow(route, currentLocation, maxAheadMeters = 25_000.0)
++        if (corridor.size < 2) return@withContext emptyList()
++        val minLat = corridor.minOf { it.latitude } - 0.012
++        val maxLat = corridor.maxOf { it.latitude } + 0.012
++        val minLng = corridor.minOf { it.longitude } - 0.015
++        val maxLng = corridor.maxOf { it.longitude } + 0.015
+         val encoded = URLEncoder.encode(query.trim(), Charsets.UTF_8.name())
+         val viewbox = "$minLng,$maxLat,$maxLng,$minLat"
+         val url = URL(
+@@ -123,17 +127,20 @@
+             if (connection.responseCode !in 200..299) return@withContext emptyList()
+             val body = connection.inputStream.bufferedReader().use { it.readText() }
+             val array = JSONArray(body)
+-            val currentIndex = nearestRouteIndex(route, currentLocation)
+             buildList {
+                 for (i in 0 until array.length()) {
+                     val obj = array.getJSONObject(i)
+                     val lat = obj.optString("lat").toDoubleOrNull() ?: continue
+                     val lon = obj.optString("lon").toDoubleOrNull() ?: continue
+                     val point = LatLng(lat, lon)
+-                    val nearestIndex = nearestRouteIndex(route, point)
+-                    val distanceFromRoute = distanceMeters(point, route.points[nearestIndex]).roundToInt()
+-                    val ahead = nearestIndex + 2 >= currentIndex
+-                    if (!ahead || distanceFromRoute > 3500) continue
++                    val match = matchPoiToAheadRoute(
++                        route = route,
++                        currentLocation = currentLocation,
++                        poiLocation = point,
++                        maxDistanceFromRouteMeters = 1_200.0,
++                        maxAheadMeters = 25_000.0
++                    ) ?: continue
++                    val distanceFromRoute = match.distanceFromRouteMeters
+                     val display = obj.optString("display_name").trim()
+                     val name = obj.optString("name").trim().ifBlank { display.substringBefore(',').trim().ifBlank { query } }
+                     add(
+@@ -145,7 +152,7 @@
+                             distanceFromRouteMeters = distanceFromRoute,
+                             detourDistanceMeters = 0,
+                             detourDurationMinutes = 0,
+-                            isAheadOfUser = true,
++                            isAheadOfUser = match.isAheadOfUser,
+                             isOpenNow = null,
+                             reliability = PoiReliability.UNKNOWN
+                         )
+@@ -204,17 +211,4 @@
+             .apply()
+     }
+ 
+-
+-    private fun nearestRouteIndex(route: Route, point: LatLng): Int =
+-        route.points.indices.minByOrNull { distanceMeters(route.points[it], point) } ?: 0
+-
+-    private fun distanceMeters(a: LatLng, b: LatLng): Double {
+-        val r = 6371000.0
+-        val p1 = Math.toRadians(a.latitude)
+-        val p2 = Math.toRadians(b.latitude)
+-        val dp = Math.toRadians(b.latitude - a.latitude)
+-        val dl = Math.toRadians(b.longitude - a.longitude)
+-        val h = sin(dp / 2).pow(2) + cos(p1) * cos(p2) * sin(dl / 2).pow(2)
+-        return 2 * r * atan2(sqrt(h), sqrt(1 - h))
+-    }
+ }
+diff -ruN base/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt work/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt
+--- base/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt	2026-08-31 04:16:32.000000000 +0000
++++ work/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt	2026-08-31 05:42:10.197138420 +0000
+@@ -140,7 +140,15 @@
+     fun updateStopStatus(id: String, status: StopStatus) {
+         _state.update { current ->
+             val itinerary = current.itinerary ?: return@update current
+-            current.copy(itinerary = itinerary.copy(stops = itinerary.stops.map { if (it.id == id) it.copy(status = status) else it }))
++            val updatedStops = itinerary.stops.map { stop ->
++                if (stop.id != id) return@map stop
++                when {
++                    stop.status == status -> stop
++                    stop.status == StopStatus.PENDING && status in setOf(StopStatus.ARRIVED, StopStatus.SKIPPED) -> stop.copy(status = status)
++                    else -> stop
++                }
++            }
++            current.copy(itinerary = itinerary.copy(stops = updatedStops))
+         }
+     }
+ 
+diff -ruN base/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt work/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+--- base/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt	2026-08-31 04:16:32.000000000 +0000
++++ work/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt	2026-08-31 05:42:10.197760375 +0000
+@@ -489,14 +489,15 @@
+                                                 val base = routeRepository.getRoutes(current, destination, session.transportMode, session.waypoints)
+                                                     .filter { it.distanceKm > 0.0 && it.durationMinutes > 0 }
+                                                     .minByOrNull { it.durationMinutes }
+-                                                raw.take(5).map { poi ->
++                                                val baseline = base ?: error("مسیر پایه برای محاسبه انحراف در دسترس نیست")
++                                                raw.take(8).mapNotNull { poi ->
+                                                     val withStop = routeRepository.getRoutes(current, destination, session.transportMode, session.waypoints + poi.location)
+                                                         .filter { it.distanceKm > 0.0 && it.durationMinutes > 0 }
+-                                                        .minByOrNull { it.durationMinutes }
+-                                                    if (base != null && withStop != null) poi.copy(
+-                                                        detourDistanceMeters = ((withStop.distanceKm - base.distanceKm).coerceAtLeast(0.0) * 1000).roundToInt(),
+-                                                        detourDurationMinutes = (withStop.durationMinutes - base.durationMinutes).coerceAtLeast(0)
+-                                                    ) else poi
++                                                        .minByOrNull { it.durationMinutes } ?: return@mapNotNull null
++                                                    poi.copy(
++                                                        detourDistanceMeters = ((withStop.distanceKm - baseline.distanceKm).coerceAtLeast(0.0) * 1000).roundToInt(),
++                                                        detourDurationMinutes = (withStop.durationMinutes - baseline.durationMinutes).coerceAtLeast(0)
++                                                    )
+                                                 }.sortedWith(compareBy<Poi> { it.detourDurationMinutes }.thenBy { it.distanceFromRouteMeters })
+                                             }.onSuccess { poiResults = it }
+                                                 .onFailure { poiError = "دریافت خدمات میان‌راه انجام نشد" }
+diff -ruN base/app/src/test/java/ir/rahyar/app/core/navigation/RoutePoiFilterTest.kt work/app/src/test/java/ir/rahyar/app/core/navigation/RoutePoiFilterTest.kt
+--- base/app/src/test/java/ir/rahyar/app/core/navigation/RoutePoiFilterTest.kt	1970-01-01 00:00:00.000000000 +0000
++++ work/app/src/test/java/ir/rahyar/app/core/navigation/RoutePoiFilterTest.kt	2026-08-31 05:42:10.198267808 +0000
+@@ -0,0 +1,55 @@
++package ir.rahyar.app.core.navigation
++
++import ir.rahyar.app.domain.models.LatLng
++import ir.rahyar.app.domain.models.Route
++import ir.rahyar.app.domain.models.RouteType
++import ir.rahyar.app.domain.models.TransportMode
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.time.LocalDateTime
++
++class RoutePoiFilterTest {
++    private fun route(): Route = Route(
++        id = "karaj-hesarak",
++        type = RouteType.RECOMMENDED,
++        points = listOf(
++            LatLng(35.8320, 50.9490),
++            LatLng(35.8300, 50.9700),
++            LatLng(35.8290, 50.9900),
++            LatLng(35.8280, 51.0100)
++        ),
++        durationMinutes = 18,
++        distanceKm = 7.0,
++        eta = LocalDateTime.now(),
++        transportMode = TransportMode.CAR
++    )
++
++    @Test fun aheadNearRouteIsAccepted() {
++        val match = matchPoiToAheadRoute(route(), LatLng(35.8318, 50.9492), LatLng(35.8291, 50.9902))
++        assertNotNull(match)
++        assertTrue(match!!.isAheadOfUser)
++        assertTrue(match.distanceFromRouteMeters < 100)
++    }
++
++    @Test fun farOffRouteIsRejected() {
++        assertNull(matchPoiToAheadRoute(route(), LatLng(35.8318, 50.9492), LatLng(35.90, 51.15)))
++    }
++
++    @Test fun behindUserIsRejected() {
++        val current = LatLng(35.8289, 50.9901)
++        val behind = LatLng(35.8319, 50.9491)
++        assertNull(matchPoiToAheadRoute(route(), current, behind, maxDistanceFromRouteMeters = 1_200.0))
++    }
++
++    @Test fun remoteZarandCandidateIsRejected() {
++        val zarandKerman = LatLng(30.8120, 56.5630)
++        assertNull(matchPoiToAheadRoute(route(), LatLng(35.8318, 50.9492), zarandKerman))
++    }
++
++    @Test fun aheadWindowDoesNotIncludeWholeRemoteRoute() {
++        val points = aheadRouteWindow(route(), LatLng(35.8318, 50.9492), maxAheadMeters = 2_500.0)
++        assertTrue(points.size in 2..3)
++    }
++}
+diff -ruN base/app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt work/app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt
+--- base/app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt	1970-01-01 00:00:00.000000000 +0000
++++ work/app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt	2026-08-31 05:42:10.198355660 +0000
+@@ -0,0 +1,64 @@
++package ir.rahyar.app.navigation
++
++import ir.rahyar.app.domain.models.LatLng
++import ir.rahyar.app.domain.models.Route
++import ir.rahyar.app.domain.models.RouteType
++import ir.rahyar.app.domain.models.StopStatus
++import ir.rahyar.app.domain.models.TransportMode
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.time.LocalDateTime
++
++class NavigationSessionWaypointTest {
++    private fun route(id: String) = Route(
++        id = id, type = RouteType.RECOMMENDED,
++        points = listOf(LatLng(35.83, 50.95), LatLng(35.82, 51.00)),
++        durationMinutes = 10, distanceKm = 5.0, eta = LocalDateTime.now(), transportMode = TransportMode.CAR
++    )
++
++    @Test fun addingStopPreservesOriginalDestinationAndUsesItinerary() {
++        val session = NavigationSession()
++        val origin = LatLng(35.83, 50.95)
++        val destination = LatLng(35.82, 51.00)
++        val stop = LatLng(35.825, 50.98)
++        session.setOrigin(origin)
++        session.setDestination(destination)
++        session.addStop(stop, "fuel-1")
++        val state = session.state.value
++        assertEquals(destination, state.destination)
++        assertEquals(destination, state.itinerary?.destination)
++        assertEquals(1, state.itinerary?.stops?.size)
++        assertEquals(StopStatus.PENDING, state.itinerary?.stops?.single()?.status)
++    }
++
++    @Test fun stopStatusCannotRegressFromArrived() {
++        val session = NavigationSession()
++        session.setOrigin(LatLng(35.83, 50.95))
++        session.setDestination(LatLng(35.82, 51.00))
++        session.addStop(LatLng(35.825, 50.98), "s1")
++        session.updateStopStatus("s1", StopStatus.ARRIVED)
++        session.updateStopStatus("s1", StopStatus.PENDING)
++        assertEquals(StopStatus.ARRIVED, session.state.value.itinerary?.stops?.single()?.status)
++    }
++
++    @Test fun skippedStopLeavesDestinationAndIsRemovedFromPendingWaypoints() {
++        val session = NavigationSession()
++        val destination = LatLng(35.82, 51.00)
++        session.setOrigin(LatLng(35.83, 50.95))
++        session.setDestination(destination)
++        session.addStop(LatLng(35.825, 50.98), "s1")
++        session.updateStopStatus("s1", StopStatus.SKIPPED)
++        assertEquals(destination, session.state.value.destination)
++        assertTrue(session.state.value.waypoints.isEmpty())
++    }
++
++    @Test fun selectingRerouteWhileNavigatingDoesNotEndSession() {
++        val session = NavigationSession()
++        session.setOrigin(LatLng(35.83, 50.95))
++        session.setDestination(LatLng(35.82, 51.00))
++        session.beginNavigation(route("r1"))
++        session.selectRoute(route("r2"))
++        assertTrue(session.state.value.navigationState is NavigationState.Navigating)
++    }
++}
