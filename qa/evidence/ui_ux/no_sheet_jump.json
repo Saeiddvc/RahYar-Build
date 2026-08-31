@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run51 CI 33368538531 passed sheetVisibilityDoesNotChangeCameraFitKey and source contracts. The route sheet now skips partial expansion, and opening/closing it does not change the route camera-fit key; camera refit occurs only for route revision or explicit overview request.",
+  "timestamp": "2026-08-31T07:31:00Z"
+}
