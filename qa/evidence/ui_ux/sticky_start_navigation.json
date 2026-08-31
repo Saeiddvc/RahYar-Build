@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run51 CI 33368538531 passed stickyStartRequiresValidSelectedRouteAndNoBlockingOverlay and source contracts. The Start Navigation CTA remains a bottom RouteSelectionOverlay outside the modal route sheet, is shown only for a valid selected route, and remains available when no blocking overlay covers it.",
+  "timestamp": "2026-08-31T07:31:00Z"
+}
