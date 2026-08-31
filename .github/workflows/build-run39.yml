@@ -15,7 +15,7 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Run50 Compile + Unit Tests
+    name: Run51 Compile + Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -319,31 +319,31 @@ jobs:
           python3 ../ci/run48.state-separation.py
           python3 ../ci/run49.gps-hud.py
           python3 ../ci/run50.maneuver-geometry.py
+          python3 ../ci/run51.ui-safety.py
 
-          sed -i 's/versionCode = 21/versionCode = 28/' app/build.gradle.kts
-          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.6-run50-maneuver-geometry"/' app/build.gradle.kts
-          grep -q 'versionCode = 28' app/build.gradle.kts
-          grep -q 'versionName = "1.6.6-run50-maneuver-geometry"' app/build.gradle.kts
+          sed -i 's/versionCode = 21/versionCode = 29/' app/build.gradle.kts
+          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.7-run51-ui-safety"/' app/build.gradle.kts
+          grep -q 'versionCode = 29' app/build.gradle.kts
+          grep -q 'versionName = "1.6.7-run51-ui-safety"' app/build.gradle.kts
 
-      - name: Inspect route preview UI contracts
+      - name: Route preview UI safety checks
         working-directory: project
         shell: bash
         run: |
-          echo '--- RouteSelectionScreen.kt ---'
-          sed -n '1,320p' app/src/main/java/ir/rahyar/app/ui/screens/RouteSelectionScreen.kt || true
-          echo '--- RoutePreviewSheet.kt ---'
-          sed -n '1,360p' app/src/main/java/ir/rahyar/app/ui/components/RoutePreviewSheet.kt || true
-          echo '--- RahyarMapScreen route preview section ---'
-          grep -n -A180 -B40 'RoutePreview' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt || true
-
-      - name: Inspect overview map camera implementation
-        working-directory: project
-        shell: bash
-        run: |
-          echo '--- RahyarOverviewMap implementation ---'
-          grep -n -A420 '^private fun RahyarOverviewMap' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt || true
-          echo '--- RouteSelectionOverlay implementation ---'
-          grep -n -A180 '^private fun RouteSelectionOverlay' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt || true
+          set -euo pipefail
+          grep -q 'rememberModalBottomSheetState(skipPartiallyExpanded = true)' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt
+          grep -q 'stickyStartVisible = shouldShowStickyStart' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt
+          grep -q 'StartNavigationGate' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt
+          grep -q 'startNavigationGate.tryAcquire(SystemClock.elapsedRealtime())' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt
+          grep -q 'cameraPadding = previewCameraPadding' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt
+          grep -q 'LaunchedEffect(mapRef, cameraFitKey)' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt
+          grep -q 'cameraPadding.bottom' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt
+          grep -q 'selectRoutePreviewRoutes' app/src/main/java/ir/rahyar/app/ui/components/RoutePreviewSheet.kt
+          grep -q 'malformedRoutesAreExcludedBeforeMapOrPreviewRendering' app/src/test/java/ir/rahyar/app/core/navigation/RoutePreviewSafetyTest.kt
+          grep -q 'safeCameraPaddingReservesActualBottomOverlaySpace' app/src/test/java/ir/rahyar/app/core/navigation/RoutePreviewSafetyTest.kt
+          grep -q 'sheetVisibilityDoesNotChangeCameraFitKey' app/src/test/java/ir/rahyar/app/core/navigation/RoutePreviewSafetyTest.kt
+          grep -q 'rapidDoubleStartIsRejectedButRetryDoesNotFreeze' app/src/test/java/ir/rahyar/app/core/navigation/RoutePreviewSafetyTest.kt
+          grep -q 'stickyStartRequiresValidSelectedRouteAndNoBlockingOverlay' app/src/test/java/ir/rahyar/app/core/navigation/RoutePreviewSafetyTest.kt
 
       - name: Maneuver distance geometry checks
         working-directory: project
