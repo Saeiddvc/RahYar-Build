@@ -1,0 +1,139 @@
+nal.bearingDegrees
++        session.appendTracePoint(
++            TracePoint(
++                location = rawCurrent,
++                timestampMillis = sample.timestampMillis,
++                speedKmh = signal.speedMps * 3.6,
++                heading = signal.bearingDegrees
++            )
++        )
+ 
+         val nextStop = session.state.value.itinerary?.stops
+             ?.filter { it.status == ir.rahyar.app.domain.models.StopStatus.PENDING }
+             ?.minByOrNull { it.order }
+-        if (nextStop != null && distanceMeters(current, nextStop.location) <= 45.0) {
++        if (nextStop != null && distanceMeters(rawCurrent, nextStop.location) <= 45.0) {
+             session.updateStopStatus(nextStop.id, ir.rahyar.app.domain.models.StopStatus.ARRIVED)
+-            if (rerouteJob?.isActive != true) rerouteJob = scope.launch { reroute(current, dest) }
++            if (rerouteJob?.isActive != true) rerouteJob = scope.launch { reroute(rawCurrent, dest) }
+         }
+ 
+-        val match = nearestSegmentMatch(route, current)
++        val match = nearestSegmentMatch(route, rawCurrent)
+         val routeHeading = bearingDegrees(route.points[match.segmentIndex], route.points[match.segmentIndex + 1])
+-        val speedReliable = Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !location.hasSpeedAccuracy() || location.speedAccuracyMetersPerSecond <= 2.5f
+-        val bearingReliable = location.hasBearing() && location.speed > 3f && speedReliable &&
+-            (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !location.hasBearingAccuracy() || location.bearingAccuracyDegrees <= 30f)
+-
+-        if (bearingReliable) lastReliableBearing = location.bearing
+-        checkOffRoute(
++        val headingDifference = if (signal.speedMps >= 1.5) angularDifference(signal.bearingDegrees, routeHeading) else null
++        val snapped = shouldSnapToRoute(
+             distanceFromRouteMeters = match.distanceMeters,
+-            currentLocation = current,
+-            destination = dest,
+-            speedMps = location.speed,
+-            heading = if (bearingReliable) location.bearing else null,
+-            routeHeading = routeHeading,
+-            horizontalAccuracyMeters = location.accuracy
++            horizontalAccuracyMeters = sample.horizontalAccuracyMeters,
++            speedMps = signal.speedMps,
++            headingDifferenceDegrees = headingDifference
+         )
++        val displayCurrent = if (snapped) match.snapped else rawCurrent
++        val offRouteDecision = evaluateOffRoute(
++            distanceFromRouteMeters = match.distanceMeters,
++            horizontalAccuracyMeters = sample.horizontalAccuracyMeters,
++            speedMps = signal.speedMps,
++            headingDifferenceDegrees = headingDifference
++        )
++        val offRoute = checkOffRoute(offRouteDecision, rawCurrent, dest, signal.speedMps)
+ 
+-        updateActive(route, location, match, null)
++        updateActive(
++            route = route,
++            rawLocation = rawCurrent,
++            displayLocation = displayCurrent,
++            speedKmh = signal.speedMps * 3.6,
++            bearing = signal.bearingDegrees,
++            accuracyMeters = location.accuracy.takeIf { location.hasAccuracy() },
++            match = match,
++            snappedToRoute = snapped,
++            isOffRoute = offRoute,
++            message = when {
++                rerouteJob?.isActive == true -> "از مسیر خارج شدید • در حال محاسبه مسیر جدید…"
++                offRoute -> "از مسیر خارج شدید"
++                else -> null
++            }
++        )
+     }
+ 
+-    private fun updateActive(route: Route, location: Location, match: RouteMatch?, message: String?) {
++    private fun updateActive(
++        route: Route,
++        rawLocation: LatLng,
++        displayLocation: LatLng,
++        speedKmh: Double,
++        bearing: Float,
++        accuracyMeters: Float?,
++        match: RouteMatch?,
++        snappedToRoute: Boolean,
++        isOffRoute: Boolean,
++        message: String?
++    ) {
+         val remainingKm = match?.let { remainingDistanceKm(route, it) } ?: route.distanceKm
+         val fractionRemaining = if (route.distanceKm > 0.0) (remainingKm / route.distanceKm).coerceIn(0.0, 1.0) else 1.0
+         val remainingMinutes = max(1, (route.durationMinutes * fractionRemaining).toInt())
+         val eta = LocalDateTime.now().plusMinutes(remainingMinutes.toLong())
+-        val current = LatLng(location.latitude, location.longitude)
+         val maneuver = match?.let { nextManeuver(route, it) }
+         val nextTurn = maneuver?.instruction
+             ?: route.steps.firstOrNull()?.instruction
+@@ -174,50 +238,42 @@
+ 
+         _hudState.value = NavigationHudState.Active(
+             route = currentRoute ?: route,
+-            currentLocation = current,
+-            speedKmh = max(0.0, location.speed * 3.6),
++            currentLocation = displayLocation,
++            speedKmh = speedKmh.coerceAtLeast(0.0),
+             eta = eta,
+             remainingDistanceKm = remainingKm,
+             nextTurn = nextTurn,
+             nextManeuverType = maneuver?.maneuverType,
+             distanceToNextManeuverMeters = maneuver?.distanceMeters,
+-            bearing = lastReliableBearing,
+-            accuracyMeters = location.accuracy,
++            bearing = bearing,
++            accuracyMeters = accuracyMeters,
+             rerouteCount = rerouteCount,
+             isRecalculating = recalculating,
+-            message = message ?: if (recalculating) "در حال محاسبه مسیر جدید…" else "موقعیت فعال"
++            isOffRoute = isOffRoute,
++            snappedToRoute = snappedToRoute,
++            message = message
+         )
+     }
+ 
+     private fun checkOffRoute(
+-        distanceFromRouteMeters: Double,
++        decision: OffRouteDecision,
+         currentLocation: LatLng,
+         destination: LatLng,
+-        speedMps: Float,
+-        heading: Float?,
+-        routeHeading: Float,
+-        horizontalAccuracyMeters: Float
+-    ) {
+-        if (rerouteJob?.isActive == true || horizontalAccuracyMeters > 50f) return
+-
+-        val threshold = when {
+-            speedMps > 25f -> 60.0
+-            speedMps > 15f -> 50.0
+-            speedMps > 5f -> 35.0
+-            else -> 30.0
+-        }
+-        val headingReliable = heading != null
+-        val headingMismatch = headingReliable && angularDifference(heading!!, routeHeading) > 45f
+-        val clearlyOffRoute = distanceFromRouteMeters > threshold * 1.7
+-        val probableOffRoute = distanceFromRoute
