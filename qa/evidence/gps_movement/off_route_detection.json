@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "No verified automated evidence yet.",
-  "timestamp": "2026-08-31T07:43:02+03:30"
+  "pass": true,
+  "details": "Run42 CI 33357073252 passed severe cross-track off-route unit test; source contract check confirms NavigationEngine uses evaluateOffRoute before reroute.",
+  "timestamp": "2026-08-31T07:58:00+03:30"
 }
