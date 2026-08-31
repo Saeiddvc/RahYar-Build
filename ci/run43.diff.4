@@ -1,0 +1,137 @@
+:31:19.272379311 +0000
+@@ -95,6 +95,13 @@
+             horizontalAlignment = Alignment.CenterHorizontally,
+             verticalArrangement = Arrangement.Center
+         ) {
++            active.speedLimitKmh?.let { limit ->
++                Text(
++                    text = "مجاز ${toPersianDigits(limit.toString())}",
++                    color = MaterialTheme.colorScheme.onSecondary,
++                    style = MaterialTheme.typography.labelMedium
++                )
++            }
+             Text(
+                 text = toPersianDigits(
+                     active.speedKmh.roundToInt().coerceAtLeast(0).toString()
+diff -ruN Run42Base/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt Run43Source/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+--- Run42Base/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt	2026-08-31 04:21:41.400417251 +0000
++++ Run43Source/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt	2026-08-31 04:31:19.271613034 +0000
+@@ -39,9 +39,11 @@
+ import ir.rahyar.app.domain.models.PoiType
+ import ir.rahyar.app.domain.models.Route
+ import ir.rahyar.app.domain.models.RouteType
++import ir.rahyar.app.domain.models.RoadEventType
+ import ir.rahyar.app.domain.repository.AppLanguage
+ import ir.rahyar.app.domain.repository.DestinationSearchRepository
+ import ir.rahyar.app.domain.repository.RouteRepository
++import ir.rahyar.app.domain.repository.RoadAwarenessRepository
+ import ir.rahyar.app.domain.repository.SettingsRepository
+ import ir.rahyar.app.navigation.NavigationSession
+ import ir.rahyar.app.ui.components.NavigationControls
+@@ -78,6 +80,7 @@
+     routeRepository: RouteRepository,
+     settingsRepository: SettingsRepository,
+     destinationSearchRepository: DestinationSearchRepository,
++    roadAwarenessRepository: RoadAwarenessRepository,
+     navigationSession: NavigationSession
+ ) {
+     val session by navigationSession.state.collectAsStateWithLifecycle()
+@@ -102,6 +105,7 @@
+         routeRepository = routeRepository,
+         settingsRepository = settingsRepository,
+         destinationSearchRepository = destinationSearchRepository,
++        roadAwarenessRepository = roadAwarenessRepository,
+         navigationSession = navigationSession,
+         onStop = {
+             navigationSession.clear()
+@@ -119,6 +123,7 @@
+     routeRepository: RouteRepository,
+     settingsRepository: SettingsRepository,
+     destinationSearchRepository: DestinationSearchRepository,
++    roadAwarenessRepository: RoadAwarenessRepository,
+     navigationSession: NavigationSession,
+     onStop: () -> Unit
+ ) {
+@@ -126,11 +131,12 @@
+     val activity = context as? Activity
+     val scope = rememberCoroutineScope()
+ 
+-    val engine = remember(context, locationProvider, routeRepository, navigationSession) {
++    val engine = remember(context, locationProvider, routeRepository, roadAwarenessRepository, navigationSession) {
+         NavigationEngine(
+             context.applicationContext,
+             locationProvider,
+             routeRepository,
++            roadAwarenessRepository,
+             navigationSession
+         )
+     }
+@@ -172,6 +178,7 @@
+     var routePolyline by remember { mutableStateOf<Polyline?>(null) }
+     val vehicleRenderState = remember { VehicleRenderState() }
+     var stopMarkers by remember { mutableStateOf<List<Marker>>(emptyList()) }
++    var roadEventMarkers by remember { mutableStateOf<List<Marker>>(emptyList()) }
+     var zoomLevel by remember { mutableFloatStateOf(16.8f) }
+ 
+     val tripStartedAtMillis = remember(initialRoute.id) {
+@@ -181,6 +188,7 @@
+     var speedSampleCount by remember { mutableIntStateOf(0) }
+     var maxSpeedKmh by remember { mutableDoubleStateOf(0.0) }
+     var lastSpokenInstruction by remember { mutableStateOf<String?>(null) }
++    var lastSpokenDriverAlert by remember { mutableStateOf<String?>(null) }
+ 
+     var permissionGranted by remember {
+         mutableStateOf(
+@@ -245,6 +253,22 @@
+         )
+     }
+ 
++    LaunchedEffect(
++        active?.driverAlert?.message,
++        session.quickSettings.voiceAlertsEnabled,
++        session.quickSettings.speedLimitAlertsEnabled,
++        voiceEnabled,
++        voiceAvailable
++    ) {
++        val alert = active?.driverAlert ?: return@LaunchedEffect
++        if (!voiceEnabled || !voiceAvailable || !session.quickSettings.voiceAlertsEnabled) return@LaunchedEffect
++        val isSpeedAlert = alert.kind.name.contains("SPEED") || alert.kind.name == "OVERSPEED"
++        if (isSpeedAlert && !session.quickSettings.speedLimitAlertsEnabled) return@LaunchedEffect
++        if (alert.message == lastSpokenDriverAlert) return@LaunchedEffect
++        lastSpokenDriverAlert = alert.message
++        voiceManager.speak(alert.message, utteranceId = "rahyar-driver-alert")
++    }
++
+     LaunchedEffect(active?.currentLocation, active?.speedKmh) {
+         val current = active ?: return@LaunchedEffect
+         if (current.currentLocation == null || showTripStory) return@LaunchedEffect
+@@ -411,6 +435,24 @@
+             }
+     }
+ 
++    LaunchedEffect(mapRef, active?.roadEvents) {
++        val map = mapRef ?: return@LaunchedEffect
++        roadEventMarkers.forEach { runCatching { map.removeMarker(it) } }
++        roadEventMarkers = active?.roadEvents.orEmpty().mapNotNull { event ->
++            val iconRes = when (event.type) {
++                RoadEventType.SPEED_CAMERA -> R.drawable.ic_speed_camera
++                RoadEventType.SPEED_BUMP -> R.drawable.ic_speed_bump
++                RoadEventType.HAZARD -> R.drawable.ic_road_hazard
++            }
++            val options = MarkerOptions()
++                .position(MapLatLng(event.location.latitude, event.location.longitude))
++                .title(event.title)
++                .snippet("${faNumber(event.distanceAheadMeters)} متر جلوتر")
++            runCatching { IconFactory.getInstance(context).fromResource(iconRes) }.getOrNull()?.let(options::icon)
++            runCatching { map.addMarker(options) }.getOrNull()
++        }
++    }
++
+     Column(
+         Modifier
+             .fillMaxSize()
+diff -ruN Run42Base/app/src/main/res/drawable/ic_road_hazard.xml Run43Source/app/src/main/res/drawable/ic_road_hazard.xml
+--- Run42Base/app/src/main/res/drawable/ic_road_hazard.xml	1970-01-01 00:00:00.000000000 +0000
++++ Run43Source/app/src/main/res/drawable/ic_road_hazard.xml	2026-08-31 04:31:37.726971834 +0000
+@@ -0,0 +1,5 @@
++<vector xmlns:android="http://schemas.android.com/apk/re
