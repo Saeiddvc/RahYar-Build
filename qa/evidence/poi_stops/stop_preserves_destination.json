@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run44 CI 33362094438 passed NavigationSessionWaypointTest: adding and arriving at a stop preserves the original final destination in NavigationSession and Itinerary.",
+  "timestamp": "2026-08-31T05:54:00Z"
+}
