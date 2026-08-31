@@ -1,5 +1,5 @@
 {
   "pass": true,
-  "details": "Run54 CI 33418655742 passed PersianNumberFormatterTest. Latin and Arabic-Indic digits normalize to Persian digits, and final typography is IRANSans FaNum.",
-  "timestamp": "2026-08-31T17:23:00Z"
+  "details": "Run55 CI 33432823023 passed PersianNumberFormatterTest. Latin and Arabic-Indic digits normalize to Persian digits, and the final APK candidate embeds the trusted IRANSans FaNum fonts.",
+  "timestamp": "2026-08-31T19:56:00Z"
 }
