@@ -49,8 +49,9 @@ jobs:
           patch -p1 < /tmp/run43.diff
           patch -p1 < ../ci/run43.fix1.diff
           patch -p1 < ../ci/run44.diff
-          patch -p1 < ../ci/run44.version.diff
 
+          sed -i 's/versionCode = 21/versionCode = 22/' app/build.gradle.kts
+          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.0-run44-poi-stops"/' app/build.gradle.kts
           grep -q 'versionCode = 22' app/build.gradle.kts
           grep -q 'versionName = "1.6.0-run44-poi-stops"' app/build.gradle.kts
 
