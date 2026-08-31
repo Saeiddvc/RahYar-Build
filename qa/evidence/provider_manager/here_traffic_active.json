@@ -1,0 +1,5 @@
+{
+  "pass": false,
+  "details": "HERE Traffic code path and provider telemetry compile successfully, but the authenticated CI smoke was skipped because HERE_API_KEY is not configured in repository secrets. This gate remains blocked; no live traffic is fabricated.",
+  "timestamp": "2026-08-31T06:25:00Z"
+}
