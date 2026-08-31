@@ -1,0 +1,135 @@
+ thresholdMeters = threshold)
++}
++
++fun shouldSnapToRoute(
++    distanceFromRouteMeters: Double,
++    horizontalAccuracyMeters: Double,
++    speedMps: Double,
++    headingDifferenceDegrees: Float?
++): Boolean {
++    val accuracy = horizontalAccuracyMeters.coerceIn(3.0, 35.0)
++    val threshold = (accuracy * 1.15 + if (speedMps > 12.0) 5.0 else 2.0).coerceIn(8.0, 28.0)
++    val headingAcceptable = headingDifferenceDegrees == null || speedMps < 2.0 || headingDifferenceDegrees <= 65f
++    return distanceFromRouteMeters <= threshold && headingAcceptable
++}
++
++fun interpolateGeoPoint(from: LatLng, to: LatLng, fraction: Float): LatLng {
++    val f = fraction.coerceIn(0f, 1f).toDouble()
++    return LatLng(
++        latitude = from.latitude + (to.latitude - from.latitude) * f,
++        longitude = from.longitude + (to.longitude - from.longitude) * f
++    )
++}
++
++fun interpolateBearing(from: Float, to: Float, fraction: Float): Float {
++    val normalizedFrom = ((from % 360f) + 360f) % 360f
++    val normalizedTo = ((to % 360f) + 360f) % 360f
++    var delta = normalizedTo - normalizedFrom
++    if (delta > 180f) delta -= 360f
++    if (delta < -180f) delta += 360f
++    return ((normalizedFrom + delta * fraction.coerceIn(0f, 1f)) % 360f + 360f) % 360f
++}
++
++fun forwardPoint(origin: LatLng, bearingDegrees: Float, distanceMeters: Double): LatLng {
++    if (distanceMeters <= 0.0) return origin
++    val radius = 6_371_000.0
++    val angular = distanceMeters / radius
++    val bearing = Math.toRadians(bearingDegrees.toDouble())
++    val lat1 = Math.toRadians(origin.latitude)
++    val lon1 = Math.toRadians(origin.longitude)
++    val lat2 = kotlin.math.asin(sin(lat1) * kotlin.math.cos(angular) + cos(lat1) * kotlin.math.sin(angular) * cos(bearing))
++    val lon2 = lon1 + atan2(
++        sin(bearing) * kotlin.math.sin(angular) * cos(lat1),
++        kotlin.math.cos(angular) - sin(lat1) * sin(lat2)
++    )
++    return LatLng(Math.toDegrees(lat2), Math.toDegrees(lon2))
++}
++
++private fun bearingDegrees(a: LatLng, b: LatLng): Float {
++    val lat1 = Math.toRadians(a.latitude)
++    val lat2 = Math.toRadians(b.latitude)
++    val deltaLon = Math.toRadians(b.longitude - a.longitude)
++    val y = sin(deltaLon) * cos(lat2)
++    val x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(deltaLon)
++    return ((Math.toDegrees(atan2(y, x)) + 360.0) % 360.0).toFloat()
++}
++
++private fun distanceMeters(a: LatLng, b: LatLng): Double {
++    val radius = 6_371_000.0
++    val dLat = Math.toRadians(b.latitude - a.latitude)
++    val dLon = Math.toRadians(b.longitude - a.longitude)
++    val lat1 = Math.toRadians(a.latitude)
++    val lat2 = Math.toRadians(b.latitude)
++    val h = sin(dLat / 2) * sin(dLat / 2) + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2)
++    return radius * 2 * atan2(sqrt(h), sqrt(1 - h))
++}
+diff -ruN Run41Baseline/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt Run41Source/project/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt
+--- Run41Baseline/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt	2026-08-31 04:16:32.000000000 +0000
++++ Run41Source/project/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt	2026-08-31 04:20:54.195624753 +0000
+@@ -150,8 +150,13 @@
+ 
+     fun selectRoute(route: Route) {
+         _state.update { current ->
++            val nextState = if (current.navigationState is NavigationState.Navigating) {
++                NavigationState.Navigating(route)
++            } else {
++                NavigationState.RoutePreview(route)
++            }
+             current.copy(
+-                navigationState = NavigationState.RoutePreview(route),
++                navigationState = nextState,
+                 selectedRoute = route,
+                 transportMode = route.transportMode
+             )
+diff -ruN Run41Baseline/app/src/main/java/ir/rahyar/app/ui/components/NavigationHud.kt Run41Source/project/app/src/main/java/ir/rahyar/app/ui/components/NavigationHud.kt
+--- Run41Baseline/app/src/main/java/ir/rahyar/app/ui/components/NavigationHud.kt	2026-08-30 08:36:26.000000000 +0000
++++ Run41Source/project/app/src/main/java/ir/rahyar/app/ui/components/NavigationHud.kt	2026-08-31 04:21:56.826004355 +0000
+@@ -81,6 +81,14 @@
+                 color = MaterialTheme.colorScheme.onSecondary,
+                 style = MaterialTheme.typography.bodySmall
+             )
++
++            active.message?.takeIf { it.isNotBlank() }?.let { status ->
++                Text(
++                    text = status,
++                    color = MaterialTheme.colorScheme.onSecondary,
++                    style = MaterialTheme.typography.labelMedium
++                )
++            }
+         }
+ 
+         Column(
+diff -ruN Run41Baseline/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt Run41Source/project/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+--- Run41Baseline/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt	2026-08-31 04:16:32.000000000 +0000
++++ Run41Source/project/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt	2026-08-31 04:21:41.400417251 +0000
+@@ -1,10 +1,14 @@
+ package ir.rahyar.app.ui.screens
+ 
+ import android.Manifest
++import android.animation.ValueAnimator
+ import android.app.Activity
+ import android.content.pm.PackageManager
++import android.graphics.Bitmap
++import android.graphics.Canvas
+ import android.graphics.Color as AndroidColor
+ import android.view.WindowManager
++import android.view.animation.LinearInterpolator
+ import androidx.activity.compose.rememberLauncherForActivityResult
+ import androidx.activity.result.contract.ActivityResultContracts
+ import androidx.compose.foundation.background
+@@ -23,6 +27,9 @@
+ import ir.rahyar.app.core.map.RahyarMapView
+ import ir.rahyar.app.core.navigation.NavigationEngine
+ import ir.rahyar.app.core.navigation.NavigationHudState
++import ir.rahyar.app.core.navigation.forwardPoint
++import ir.rahyar.app.core.navigation.interpolateBearing
++import ir.rahyar.app.core.navigation.interpolateGeoPoint
+ import ir.rahyar.app.core.navigation.VoiceGuidanceManager
+ import ir.rahyar.app.data.trip.TripStoryRecord
+ import ir.rahyar.app.data.trip.TripStoryStore
+@@ -49,6 +56,17 @@
+ import org.maplibre.android.camera.CameraUpdateFactory
+ import org.maplibre.android.geometry.LatLng as MapLatLng
+ import org.maplibre.android.maps.MapLibreMap
++import org.maplibre.android.style.expressions.Expression.get
++import org.maplibre.android.style.layers.Prope
