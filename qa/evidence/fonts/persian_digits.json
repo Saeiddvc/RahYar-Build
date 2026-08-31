@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "No verified automated evidence yet.",
-  "timestamp": "2026-08-31T07:43:02+03:30"
+  "pass": true,
+  "details": "Run54 CI 33418655742 passed PersianNumberFormatterTest. Latin and Arabic-Indic digits normalize to Persian digits, and final typography is IRANSans FaNum.",
+  "timestamp": "2026-08-31T17:23:00Z"
 }
