@@ -1,0 +1,130 @@
+diff -ruN Run41Baseline/app/build.gradle.kts Run41Source/project/app/build.gradle.kts
+--- Run41Baseline/app/build.gradle.kts	2026-08-31 04:16:32.000000000 +0000
++++ Run41Source/project/app/build.gradle.kts	2026-08-31 04:19:36.573378458 +0000
+@@ -16,8 +16,8 @@
+         applicationId = "ir.rahyar.app"
+         minSdk = 24
+         targetSdk = 34
+-        versionCode = 19
+-        versionName = "1.5.7-functional-core"
++        versionCode = 20
++        versionName = "1.5.8-run42-gps-core"
+         buildConfigField("String", "ORS_API_KEY", "\"${orsApiKey.escapeBuildConfig()}\"")
+         buildConfigField("String", "HERE_API_KEY", "\"${hereApiKey.escapeBuildConfig()}\"")
+     }
+@@ -60,4 +60,5 @@
+     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+     implementation("androidx.datastore:datastore-preferences:1.1.1")
+     implementation("com.squareup.okhttp3:okhttp:4.12.0")
++    testImplementation("junit:junit:4.13.2")
+ }
+diff -ruN Run41Baseline/app/src/main/java/ir/rahyar/app/core/location/FusedLocationProviderImpl.kt Run41Source/project/app/src/main/java/ir/rahyar/app/core/location/FusedLocationProviderImpl.kt
+--- Run41Baseline/app/src/main/java/ir/rahyar/app/core/location/FusedLocationProviderImpl.kt	2026-08-30 08:36:26.000000000 +0000
++++ Run41Source/project/app/src/main/java/ir/rahyar/app/core/location/FusedLocationProviderImpl.kt	2026-08-31 04:19:45.047221035 +0000
+@@ -4,6 +4,7 @@
+ import android.content.Context
+ import android.location.Location
+ import android.os.Looper
++import com.google.android.gms.location.Granularity
+ import com.google.android.gms.location.LocationCallback
+ import com.google.android.gms.location.LocationRequest
+ import com.google.android.gms.location.LocationResult
+@@ -21,13 +22,18 @@
+     @SuppressLint("MissingPermission")
+     override fun startLocationUpdates(onUpdate: (Location) -> Unit) {
+         stopLocationUpdates()
+-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 3000L)
+-            .setMinUpdateIntervalMillis(1000L)
+-            .setWaitForAccurateLocation(false)
++        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
++            .setMinUpdateIntervalMillis(500L)
++            .setMaxUpdateDelayMillis(0L)
++            .setMaxUpdateAgeMillis(2000L)
++            .setGranularity(Granularity.GRANULARITY_FINE)
++            .setWaitForAccurateLocation(true)
+             .build()
+         val cb = object : LocationCallback() {
+             override fun onLocationResult(result: LocationResult) {
+-                result.lastLocation?.let(onUpdate)
++                result.locations
++                    .sortedBy { it.elapsedRealtimeNanos }
++                    .forEach(onUpdate)
+             }
+         }
+         callback = cb
+diff -ruN Run41Baseline/app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt Run41Source/project/app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt
+--- Run41Baseline/app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt	2026-08-31 04:16:32.000000000 +0000
++++ Run41Source/project/app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt	2026-08-31 04:20:15.847725705 +0000
+@@ -46,6 +46,8 @@
+         val accuracyMeters: Float?,
+         val rerouteCount: Int = 0,
+         val isRecalculating: Boolean = false,
++        val isOffRoute: Boolean = false,
++        val snappedToRoute: Boolean = false,
+         val message: String? = null
+     ) : NavigationHudState
+ }
+@@ -67,6 +69,7 @@
+     private var started = false
+     private var lastReliableBearing = 0f
+     private var rerouteCount = 0
++    private val signalFusion = NavigationSignalFusion()
+ 
+     private val _hudState = MutableStateFlow<NavigationHudState>(NavigationHudState.Idle)
+     val hudState: StateFlow<NavigationHudState> = _hudState.asStateFlow()
+@@ -77,6 +80,7 @@
+         session.beginNavigation(route)
+         offRouteCount = 0
+         rerouteCount = 0
++        signalFusion.reset()
+         if (!wakeLock.isHeld) {
+             runCatching { wakeLock.acquire(2 * 60 * 60 * 1000L) }
+         }
+@@ -113,6 +117,7 @@
+         currentRoute = null
+         destination = null
+         offRouteCount = 0
++        signalFusion.reset()
+         _hudState.value = NavigationHudState.Idle
+     }
+ 
+@@ -124,48 +129,107 @@
+     private fun processLocation(location: Location) {
+         val route = currentRoute ?: return
+         val dest = destination ?: return
+-        if (!location.hasAccuracy() || location.accuracy > 80f) {
+-            updateActive(route, location, null, "دقت موقعیت کافی نیست")
++        val rawCurrent = LatLng(location.latitude, location.longitude)
++        val sample = NavigationSignalSample(
++            location = rawCurrent,
++            timestampMillis = location.time.takeIf { it > 0L } ?: System.currentTimeMillis(),
++            speedMps = if (location.hasSpeed()) location.speed.toDouble() else null,
++            speedAccuracyMps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && location.hasSpeedAccuracy()) {
++                location.speedAccuracyMetersPerSecond.toDouble()
++            } else null,
++            bearingDegrees = if (location.hasBearing()) location.bearing else null,
++            bearingAccuracyDegrees = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && location.hasBearingAccuracy()) {
++                location.bearingAccuracyDegrees
++            } else null,
++            horizontalAccuracyMeters = if (location.hasAccuracy()) location.accuracy.toDouble() else 999.0
++        )
++
++        val signal = signalFusion.fuse(sample)
++        if (signal == null) {
++            val active = _hudState.value as? NavigationHudState.Active
++            if (active != null) {
++                _hudState.value = active.copy(
++                    accuracyMeters = location.accuracy.takeIf { location.hasAccuracy() },
++                    message = if (!location.hasAccuracy() || location.accuracy > 80f) {
++                        "دقت موقعیت کافی نیست"
++                    } else {
++                        "موقعیت GPS قدیمی است؛ منتظر Fix جدید"
++                    }
++                )
++            }
+             return
+         }
+ 
+-        val current = LatLng(location.latitude, location.longitude)
+-        session.appendTracePoint(TracePoint(current, System.currentTimeMillis(), max(0.0, location.speed * 3.6), if (location.hasBearing()) location.bearing else lastReliableBearing))
++        lastReliableBearing = sig
