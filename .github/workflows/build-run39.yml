@@ -49,6 +49,7 @@ jobs:
           patch -p1 < /tmp/run43.diff
           patch -p1 < ../ci/run43.fix1.diff
           patch -p1 < ../ci/run44.diff
+          patch -p1 < ../ci/run44.fix1.diff
 
           sed -i 's/versionCode = 21/versionCode = 22/' app/build.gradle.kts
           sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.0-run44-poi-stops"/' app/build.gradle.kts
@@ -98,6 +99,9 @@ jobs:
           grep -q 'stop.status == StopStatus.PENDING' app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt
           grep -q 'selectingRerouteWhileNavigatingDoesNotEndSession' app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt
           grep -q 'remoteZarandCandidateIsRejected' app/src/test/java/ir/rahyar/app/core/navigation/RoutePoiFilterTest.kt
+          grep -q 'calculatePoiDetour' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'unavailableBaseRouteNeverProducesFakeZeroDetour' app/src/test/java/ir/rahyar/app/core/navigation/PoiDetourTest.kt
+          grep -q 'arrivingAtStopThenSelectingContinuationRouteKeepsFinalDestinationAndSessionAlive' app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt
 
       - name: Live speed-limit provider smoke
         shell: bash
