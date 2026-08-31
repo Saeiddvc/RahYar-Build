@@ -48,6 +48,9 @@ new_home = """HomeScreen(
 
 call_start = nh.find("HomeScreen(")
 if call_start < 0:
+    print("RUN53_NAVHOST_DUMP_START")
+    print(nh)
+    print("RUN53_NAVHOST_DUMP_END")
     raise SystemExit("Run53 HomeScreen navigation call not found")
 
 depth = 0
