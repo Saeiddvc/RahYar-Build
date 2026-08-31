@@ -19,60 +19,81 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Validate Checklist JSON
+      - name: Validate QA JSON
         run: |
           set -euo pipefail
-          jq -e . ./qa/RahYar_QA_Checklist_v1.5.5.json > /dev/null
+          jq -e . qa/RahYar_QA_Checklist_v1.5.5.json >/dev/null
+          jq -e . qa/RahYar_QA_Evidence_v1.5.5.json >/dev/null
 
-      - name: Validate Blocking Items
+      - name: Validate required contract items against evidence
         run: |
           set -euo pipefail
           failed=0
-          echo "Checking Blocking Items..."
-          while IFS= read -r path; do
-            value="$(jq -r "$path" ./qa/RahYar_QA_Checklist_v1.5.5.json)"
-            if [ "$value" != "true" ]; then
-              echo "BLOCKING FAILED: $path"
-              failed=1
-            else
-              echo "PASS: $path"
-            fi
-          done < <(jq -r '.blocking | to_entries[] as $g | $g.value | keys[] | ".blocking.($g.key).(.)"' ./qa/RahYar_QA_Checklist_v1.5.5.json)
-          [ "$failed" -eq 0 ] || { echo "QA Gate FAILED — Blocking items not satisfied."; exit 1; }
 
-      - name: Validate Required Items
-        run: |
-          set -euo pipefail
-          failed=0
-          echo "Checking Required Items..."
-          while IFS= read -r item; do
-            value="$(jq -r ".required.$item" ./qa/RahYar_QA_Checklist_v1.5.5.json)"
-            if [ "$value" != "true" ]; then
-              echo "REQUIRED WARNING: $item"
-              failed=1
-            else
-              echo "PASS: $item"
-            fi
-          done < <(jq -r '.required | keys[]' ./qa/RahYar_QA_Checklist_v1.5.5.json)
-          if [ "$failed" -eq 1 ]; then
-            echo "Required items have warnings — review required."
+          check_group() {
+            group="$1"
+            while IFS=$'\t' read -r key required; do
+              [ "$required" = "true" ] || continue
+              path="$group.$key"
+              passed="$(jq -r --arg p "$path" '.results[$p].passed // false' qa/RahYar_QA_Evidence_v1.5.5.json)"
+              evidence="$(jq -r --arg p "$path" '.results[$p].evidence // ""' qa/RahYar_QA_Evidence_v1.5.5.json)"
+              if [ "$passed" != "true" ] || [ -z "$evidence" ]; then
+                echo "FAIL: $path — no verified automated evidence"
+                failed=1
+              else
+                echo "PASS: $path — $evidence"
+              fi
+            done < <(jq -r --arg g "$group" '
+              if $g == "blocking" then
+                .blocking
+                | to_entries[]
+                | .key as $section
+                | .value
+                | to_entries[]
+                | [$section + "." + .key, (.value|tostring)]
+                | @tsv
+              elif $g == "required" then
+                .required | to_entries[] | [.key, (.value|tostring)] | @tsv
+              elif $g == "home" then
+                .home | to_entries[] | [.key, (.value|tostring)] | @tsv
+              else empty end
+            ' qa/RahYar_QA_Checklist_v1.5.5.json)
+          }
+
+          check_group blocking
+          check_group required
+          check_group home
+
+          if [ "$failed" -ne 0 ]; then
+            echo "RahYar QA Gate FAILED — required functionality is not proven."
+            exit 1
           fi
 
-      - name: Validate Acceptance Gate
+      - name: Validate acceptance gate
         run: |
           set -euo pipefail
           failed=0
-          echo "Checking Acceptance Gate..."
-          while IFS= read -r item; do
-            value="$(jq -r ".acceptance_gate.$item" ./qa/RahYar_QA_Checklist_v1.5.5.json)"
-            if [ "$value" != "true" ]; then
-              echo "ACCEPTANCE FAILED: $item"
-              failed=1
-            else
-              echo "PASS: $item"
-            fi
-          done < <(jq -r '.acceptance_gate | keys[]' ./qa/RahYar_QA_Checklist_v1.5.5.json)
-          [ "$failed" -eq 0 ] || { echo "QA Gate FAILED — Acceptance Gate not satisfied."; exit 1; }
+          while IFS=$'\t' read -r key required; do
+            [ "$required" = "true" ] || continue
+            case "$key" in
+              all_blocking_must_pass|all_required_must_pass)
+                echo "PASS: acceptance_gate.$key — derived from previous step"
+                ;;
+              *)
+                path="acceptance_gate.$key"
+                passed="$(jq -r --arg p "$path" '.results[$p].passed // false' qa/RahYar_QA_Evidence_v1.5.5.json)"
+                evidence="$(jq -r --arg p "$path" '.results[$p].evidence // ""' qa/RahYar_QA_Evidence_v1.5.5.json)"
+                if [ "$passed" != "true" ] || [ -z "$evidence" ]; then
+                  echo "FAIL: $path — no verified automated evidence"
+                  failed=1
+                else
+                  echo "PASS: $path — $evidence"
+                fi
+                ;;
+            esac
+          done < <(jq -r '.acceptance_gate | to_entries[] | [.key, (.value|tostring)] | @tsv' qa/RahYar_QA_Checklist_v1.5.5.json)
+
+          [ "$failed" -eq 0 ] || { echo "RahYar Acceptance Gate FAILED."; exit 1; }
 
       - name: Final Result
-        run: echo "RahYar QA Gate PASSED — Build Approved."
+        run: echo "RahYar QA Gate PASSED — Build Approved by evidence."
