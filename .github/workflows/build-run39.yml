@@ -15,7 +15,7 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Run49 Compile + Unit Tests
+    name: Run50 Compile + Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -318,20 +318,23 @@ jobs:
           python3 ../ci/run47.providers.py
           python3 ../ci/run48.state-separation.py
           python3 ../ci/run49.gps-hud.py
+          python3 ../ci/run50.maneuver-geometry.py
 
-          sed -i 's/versionCode = 21/versionCode = 27/' app/build.gradle.kts
-          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.5-run49-gps-hud"/' app/build.gradle.kts
-          grep -q 'versionCode = 27' app/build.gradle.kts
-          grep -q 'versionName = "1.6.5-run49-gps-hud"' app/build.gradle.kts
+          sed -i 's/versionCode = 21/versionCode = 28/' app/build.gradle.kts
+          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.6-run50-maneuver-geometry"/' app/build.gradle.kts
+          grep -q 'versionCode = 28' app/build.gradle.kts
+          grep -q 'versionName = "1.6.6-run50-maneuver-geometry"' app/build.gradle.kts
 
-      - name: Inspect maneuver implementation
+      - name: Maneuver distance geometry checks
         working-directory: project
         shell: bash
         run: |
-          echo '--- NavigationEngine maneuver implementation ---'
-          grep -n -A90 -B15 'fun nextManeuver' app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt || true
-          echo '--- Route model ---'
-          sed -n '1,220p' app/src/main/java/ir/rahyar/app/domain/models/Route.kt
+          set -euo pipefail
+          grep -q 'fun distanceAlongRouteToLocationMeters' app/src/main/java/ir/rahyar/app/core/navigation/ManeuverGeometry.kt
+          grep -q 'distanceAlongRouteToLocationMeters(' app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt
+          grep -q 'turnGeometrySumsBothPolylineLegsNotAirDistance' app/src/test/java/ir/rahyar/app/core/navigation/ManeuverGeometryTest.kt
+          grep -q 'targetBehindCurrentIsNotReportedAsUpcomingManeuver' app/src/test/java/ir/rahyar/app/core/navigation/ManeuverGeometryTest.kt
+          ! grep -A25 'private fun nextManeuver' app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt | grep -q 'distanceToPointAlongRouteMeters'
 
       - name: GPS core source contract checks
         working-directory: project
