@@ -336,6 +336,15 @@ jobs:
           echo '--- RahyarMapScreen route preview section ---'
           grep -n -A180 -B40 'RoutePreview' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt || true
 
+      - name: Inspect overview map camera implementation
+        working-directory: project
+        shell: bash
+        run: |
+          echo '--- RahyarOverviewMap implementation ---'
+          grep -n -A420 '^private fun RahyarOverviewMap' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt || true
+          echo '--- RouteSelectionOverlay implementation ---'
+          grep -n -A180 '^private fun RouteSelectionOverlay' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt || true
+
       - name: Maneuver distance geometry checks
         working-directory: project
         shell: bash
