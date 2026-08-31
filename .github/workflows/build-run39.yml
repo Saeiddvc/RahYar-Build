@@ -337,18 +337,19 @@ jobs:
           set -euo pipefail
 
           # Home / personal places / shortcuts.
-          grep -q 'requiredHomeServiceShortcuts' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
+          grep -q 'HomeDashboardOverlay(' app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt
+          grep -q 'requiredHomeServiceShortcuts' app/src/main/java/ir/rahyar/app/ui/screens/HomeDashboardOverlay.kt
           grep -q 'HomeServiceType.REST_AREA' app/src/main/java/ir/rahyar/app/core/home/HomeDashboard.kt
           grep -q 'HomeServiceType.TOILET' app/src/main/java/ir/rahyar/app/core/home/HomeDashboard.kt
           grep -q 'HomeServiceType.TOURISM' app/src/main/java/ir/rahyar/app/core/home/HomeDashboard.kt
-          grep -q 'PersonalPlacesStore.saveHome' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
-          grep -q 'PersonalPlacesStore.saveWork' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
-          grep -q 'PersonalPlacesStore.addSaved' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
-          grep -q 'destinationSearchRepository.recentDestinations' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
-          grep -q 'TripStoryStore.load' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
-          grep -q 'weatherRepository.getWeatherAlongRoute' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
-          grep -q 'trafficRepository.getTrafficForRoute' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
-          grep -q 'filterHomeServiceResults' app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt
+          grep -q 'PersonalPlacesStore.saveHome' app/src/main/java/ir/rahyar/app/ui/screens/HomeDashboardOverlay.kt
+          grep -q 'PersonalPlacesStore.saveWork' app/src/main/java/ir/rahyar/app/ui/screens/HomeDashboardOverlay.kt
+          grep -q 'PersonalPlacesStore.addSaved' app/src/main/java/ir/rahyar/app/ui/screens/HomeDashboardOverlay.kt
+          grep -q 'destinationSearchRepository.recentDestinations' app/src/main/java/ir/rahyar/app/ui/screens/HomeDashboardOverlay.kt
+          grep -q 'TripStoryStore.load' app/src/main/java/ir/rahyar/app/ui/screens/HomeDashboardOverlay.kt
+          grep -q 'weatherRepository.getWeatherAlongRoute' app/src/main/java/ir/rahyar/app/ui/screens/HomeDashboardOverlay.kt
+          grep -q 'trafficRepository.getTrafficForRoute' app/src/main/java/ir/rahyar/app/ui/screens/HomeDashboardOverlay.kt
+          grep -q 'filterHomeServiceResults' app/src/main/java/ir/rahyar/app/ui/screens/HomeDashboardOverlay.kt
           grep -q 'requiredServiceShortcutsAreComplete' app/src/test/java/ir/rahyar/app/core/home/HomeDashboardContractTest.kt
           grep -q 'remoteServiceResultsAreRejectedFromHome' app/src/test/java/ir/rahyar/app/core/home/HomeDashboardContractTest.kt
           grep -q 'liveWeatherAndHeavyTrafficAreVisible' app/src/test/java/ir/rahyar/app/core/home/HomeDashboardContractTest.kt
