@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run48 CI 33365317648 passed rerouteChangesRouteWithoutResettingSessionOrTrace. Changing the selected route during navigation preserves sessionId, NavigationState.Navigating, and accumulated TripTrace.",
+  "timestamp": "2026-08-31T06:46:00Z"
+}
