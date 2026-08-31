@@ -330,14 +330,18 @@ jobs:
         working-directory: project
         shell: bash
         run: |
-          echo '--- RahyarNavHost dependencies ---'
-          sed -n '1,240p' app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt
-          echo '--- TrafficRepository ---'
-          sed -n '1,220p' app/src/main/java/ir/rahyar/app/domain/repository/TrafficRepository.kt || true
-          echo '--- ActiveNavigation TripStory context ---'
-          grep -n -A330 -B120 'if (showTripStory)' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt || true
-          echo '--- ActiveNavigation weather and road effects ---'
-          grep -n -A190 -B50 'liveWeather' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt || true
+          echo '--- TrafficInfo model ---'
+          grep -R -n -A120 -B20 'data class TrafficInfo' app/src/main/java || true
+          echo '--- WeatherInfo model ---'
+          grep -R -n -A160 -B20 'data class WeatherInfo' app/src/main/java || true
+          echo '--- TripStoryStore ---'
+          sed -n '1,300p' app/src/main/java/ir/rahyar/app/data/local/TripStoryStore.kt || find app/src/main/java -name '*TripStory*' -type f -maxdepth 10 -print -exec sed -n '1,300p' {} \;
+          echo '--- NavigationControls ---'
+          sed -n '1,240p' app/src/main/java/ir/rahyar/app/ui/components/NavigationControls.kt
+          echo '--- Active imports and signatures ---'
+          sed -n '1,230p' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          echo '--- TripStory sheet tail ---'
+          sed -n '738,1040p' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
           echo 'TRIP_STORY_INSPECTION_DONE'
           exit 86
 
