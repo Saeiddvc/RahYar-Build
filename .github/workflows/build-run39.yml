@@ -326,6 +326,21 @@ jobs:
           grep -q 'versionCode = 29' app/build.gradle.kts
           grep -q 'versionName = "1.6.7-run51-ui-safety"' app/build.gradle.kts
 
+      - name: Inspect Trip Story and repository wiring
+        working-directory: project
+        shell: bash
+        run: |
+          echo '--- RahyarNavHost dependencies ---'
+          sed -n '1,240p' app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt
+          echo '--- TrafficRepository ---'
+          sed -n '1,220p' app/src/main/java/ir/rahyar/app/domain/repository/TrafficRepository.kt || true
+          echo '--- ActiveNavigation TripStory context ---'
+          grep -n -A330 -B120 'if (showTripStory)' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt || true
+          echo '--- ActiveNavigation weather and road effects ---'
+          grep -n -A190 -B50 'liveWeather' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt || true
+          echo 'TRIP_STORY_INSPECTION_DONE'
+          exit 86
+
       - name: Route preview UI safety checks
         working-directory: project
         shell: bash
