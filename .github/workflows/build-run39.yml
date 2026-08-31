@@ -15,7 +15,7 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Run47 Compile + Unit Tests
+    name: Run48 Compile + Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -316,11 +316,12 @@ jobs:
           python3 ../ci/run45.weather.py
           python3 ../ci/run46.search.py
           python3 ../ci/run47.providers.py
+          python3 ../ci/run48.state-separation.py
 
-          sed -i 's/versionCode = 21/versionCode = 25/' app/build.gradle.kts
-          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.3-run47-providers"/' app/build.gradle.kts
-          grep -q 'versionCode = 25' app/build.gradle.kts
-          grep -q 'versionName = "1.6.3-run47-providers"' app/build.gradle.kts
+          sed -i 's/versionCode = 21/versionCode = 26/' app/build.gradle.kts
+          sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.6.4-run48-state-separation"/' app/build.gradle.kts
+          grep -q 'versionCode = 26' app/build.gradle.kts
+          grep -q 'versionName = "1.6.4-run48-state-separation"' app/build.gradle.kts
 
       - name: GPS core source contract checks
         working-directory: project
@@ -372,6 +373,20 @@ jobs:
           grep -q 'routeSegmentPolylines' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
           grep -q 'segmentColors' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
           grep -q 'twoPendingStopsProduceThreeIndependentSegments' app/src/test/java/ir/rahyar/app/core/navigation/RouteSegmentPlannerTest.kt
+
+      - name: Route Session Trace Story separation checks
+        working-directory: project
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'fun buildRouteSummary(route: Route)' app/src/main/java/ir/rahyar/app/core/navigation/JourneySeparation.kt
+          grep -q 'fun buildTripSummary(trace: TripTrace)' app/src/main/java/ir/rahyar/app/core/navigation/JourneySeparation.kt
+          grep -q 'fun buildTripStoryPayload(trace: TripTrace)' app/src/main/java/ir/rahyar/app/core/navigation/JourneySeparation.kt
+          ! grep -q 'fun buildTripStoryPayload.*Route' app/src/main/java/ir/rahyar/app/core/navigation/JourneySeparation.kt
+          grep -q 'rerouteChangesRouteWithoutResettingSessionOrTrace' app/src/test/java/ir/rahyar/app/core/navigation/JourneySeparationTest.kt
+          grep -q 'storyPayloadCopiesTraceListAndDoesNotShareMutableList' app/src/test/java/ir/rahyar/app/core/navigation/JourneySeparationTest.kt
+          grep -q 'val storyPayload = buildTripStoryPayload(session.tripTrace)' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          ! grep -A4 'private fun TripStorySheet(' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt | grep -q 'route: Route'
 
       - name: Provider manager source contract checks
         working-directory: project
