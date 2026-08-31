@@ -17,6 +17,8 @@ jobs:
   compile-check:
     name: Run53 Compile + Unit Tests
     runs-on: ubuntu-latest
+    env:
+      HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -573,7 +575,8 @@ jobs:
       - name: Live HERE Traffic authenticated smoke
         if: ${{ env.HERE_API_KEY != '' }}
         env:
-          HERE_API_KEY: ${{ secrets.HERE_API_KEY }}
+          HERE_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
+          HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
