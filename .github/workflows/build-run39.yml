@@ -404,8 +404,8 @@ jobs:
         run: |
           set -euo pipefail
           grep -q 'class TripStoryRecorder' app/src/main/java/ir/rahyar/app/core/navigation/TripStoryRuntime.kt
-          grep -q 'buildTripSummary(trace)' app/src/main/java/ir/rahyar/app/core/navigation/TripStoryRuntime.kt
-          grep -q 'if (!info.isLive) return' app/src/main/java/ir/rahyar/app/core/navigation/TripStoryRuntime.kt
+          grep -q 'buildTripSummary(sortedTrace)' app/src/main/java/ir/rahyar/app/core/navigation/TripStoryRuntime.kt
+          grep -q 'if (!info.isLive ||' app/src/main/java/ir/rahyar/app/core/navigation/TripStoryRuntime.kt
           grep -q 'ActivityResultContracts.GetContent()' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
           grep -q 'tripStoryRecorder.recordMedia' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
           grep -q 'tripStoryRecorder.recordWeather' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
