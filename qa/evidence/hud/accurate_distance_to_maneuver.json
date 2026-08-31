@@ -1,0 +1,5 @@
+{
+  "pass": false,
+  "details": "Run49 confirms the HUD consumes maneuver.distanceMeters, but no independent maneuver-distance geometry test has yet verified the calculation itself. This remains blocked.",
+  "timestamp": "2026-08-31T06:54:00Z"
+}
