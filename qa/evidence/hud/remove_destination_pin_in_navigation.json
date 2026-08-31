@@ -1,5 +1,5 @@
 {
   "pass": true,
-  "details": "Run49 CI 33365704532 passed source contracts confirming no destinationMarker exists in ActiveNavigationScreen; the primary live map focus is the vehicle SymbolLayer, with only explicit stop/road-event markers added.",
-  "timestamp": "2026-08-31T06:52:00Z"
+  "details": "Run49 CI 33365704532 passed source contracts confirming no destinationMarker exists in ActiveNavigationScreen; live navigation focus is the vehicle SymbolLayer.",
+  "timestamp": "2026-08-31T06:54:00Z"
 }
