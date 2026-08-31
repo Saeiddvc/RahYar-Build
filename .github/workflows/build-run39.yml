@@ -15,7 +15,7 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Run43 Compile + Unit Tests
+    name: Run44 Compile + Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,9 +48,11 @@ jobs:
           cd project
           patch -p1 < /tmp/run43.diff
           patch -p1 < ../ci/run43.fix1.diff
+          patch -p1 < ../ci/run44.diff
+          patch -p1 < ../ci/run44.version.diff
 
-          grep -q 'versionCode = 21' app/build.gradle.kts
-          grep -q 'versionName = "1.5.9-run43-road-awareness"' app/build.gradle.kts
+          grep -q 'versionCode = 22' app/build.gradle.kts
+          grep -q 'versionName = "1.6.0-run44-poi-stops"' app/build.gradle.kts
 
       - name: GPS core source contract checks
         working-directory: project
@@ -81,6 +83,20 @@ jobs:
           grep -q 'ic_speed_camera' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
           grep -q 'ic_speed_bump' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
           grep -q 'ic_road_hazard' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+
+      - name: POI and itinerary source contract checks
+        working-directory: project
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'aheadRouteWindow' app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
+          grep -q 'matchPoiToAheadRoute' app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
+          grep -q 'maxDistanceFromRouteMeters = 1_200.0' app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
+          grep -q 'mapNotNull' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'baseline = base ?: error' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'stop.status == StopStatus.PENDING' app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt
+          grep -q 'selectingRerouteWhileNavigatingDoesNotEndSession' app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt
+          grep -q 'remoteZarandCandidateIsRejected' app/src/test/java/ir/rahyar/app/core/navigation/RoutePoiFilterTest.kt
 
       - name: Live speed-limit provider smoke
         shell: bash
