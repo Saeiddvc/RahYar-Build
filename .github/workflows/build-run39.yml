@@ -15,12 +15,12 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Run42 Compile + Unit Tests
+    name: Run43 Compile + Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Reconstruct source and apply Run40 + Run41 + Run42
+      - name: Reconstruct source and apply Run40 + Run41 + Run42 + Run43
         shell: bash
         run: |
           set -euo pipefail
@@ -42,11 +42,16 @@ jobs:
           cat ci/run42.diff.0 ci/run42.diff.1 ci/run42.diff.2 ci/run42.diff.3 ci/run42.diff.4 ci/run42.diff.5 > /tmp/run42.diff
           cd project
           patch -p1 < /tmp/run42.diff
+          cd ..
 
-          grep -q 'versionCode = 20' app/build.gradle.kts
-          grep -q 'versionName = "1.5.8-run42-gps-core"' app/build.gradle.kts
+          cat ci/run43.diff.0 ci/run43.diff.1 ci/run43.diff.2 ci/run43.diff.3 ci/run43.diff.4 ci/run43.diff.5 > /tmp/run43.diff
+          cd project
+          patch -p1 < /tmp/run43.diff
 
-      - name: Source contract checks for GPS core
+          grep -q 'versionCode = 21' app/build.gradle.kts
+          grep -q 'versionName = "1.5.9-run43-road-awareness"' app/build.gradle.kts
+
+      - name: GPS core source contract checks
         working-directory: project
         shell: bash
         run: |
@@ -59,6 +64,22 @@ jobs:
           grep -q 'NavigationSignalFusion' app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt
           grep -q 'setWaitForAccurateLocation(true)' app/src/main/java/ir/rahyar/app/core/location/FusedLocationProviderImpl.kt
           grep -q 'setMinUpdateIntervalMillis(500L)' app/src/main/java/ir/rahyar/app/core/location/FusedLocationProviderImpl.kt
+
+      - name: Road awareness source contract checks
+        working-directory: project
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'OverpassRoadAwarenessApi' app/src/main/java/ir/rahyar/app/data/remote/RoadAwarenessApi.kt
+          grep -q 'way\["maxspeed"\]' app/src/main/java/ir/rahyar/app/data/remote/RoadAwarenessApi.kt
+          grep -q 'speed_camera' app/src/main/java/ir/rahyar/app/data/remote/RoadAwarenessApi.kt
+          grep -q 'traffic_calming' app/src/main/java/ir/rahyar/app/data/remote/RoadAwarenessApi.kt
+          grep -q 'hazard' app/src/main/java/ir/rahyar/app/data/remote/RoadAwarenessApi.kt
+          grep -q 'evaluateDriverAlert' app/src/main/java/ir/rahyar/app/core/navigation/NavigationEngine.kt
+          grep -q 'speedLimitKmh' app/src/main/java/ir/rahyar/app/ui/components/NavigationHud.kt
+          grep -q 'ic_speed_camera' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'ic_speed_bump' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+          grep -q 'ic_road_hazard' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
 
       - name: Supply temporary compile-only font resources
         shell: bash
