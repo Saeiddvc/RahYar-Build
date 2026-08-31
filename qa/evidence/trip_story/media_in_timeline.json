@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run52 CI 33375884732 passed selectedRealMediaAppearsInTimeline. Media is added only from an actual content picker URI with a real current/last-trace location and timestamp, then appears in the Trip Story timeline.",
+  "timestamp": "2026-08-31T09:09:00Z"
+}
