@@ -37,7 +37,6 @@ copy_asset(
 
 nav_host = root / "app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt"
 nh = nav_host.read_text()
-old_home = "HomeScreen(navController, locationProvider, navigationSession)"
 new_home = """HomeScreen(
                     navController = navController,
                     locationProvider = locationProvider,
@@ -46,9 +45,27 @@ new_home = """HomeScreen(
                     weatherRepository = weatherRepository,
                     trafficRepository = trafficRepository
                 )"""
-if old_home not in nh:
-    raise SystemExit("Run53 HomeScreen navigation call target missing")
-nh = nh.replace(old_home, new_home, 1)
+
+call_start = nh.find("HomeScreen(")
+if call_start < 0:
+    raise SystemExit("Run53 HomeScreen navigation call not found")
+
+depth = 0
+call_end = None
+for index in range(call_start, len(nh)):
+    ch = nh[index]
+    if ch == "(":
+        depth += 1
+    elif ch == ")":
+        depth -= 1
+        if depth == 0:
+            call_end = index + 1
+            break
+
+if call_end is None:
+    raise SystemExit("Run53 HomeScreen navigation call is unbalanced")
+
+nh = nh[:call_start] + new_home + nh[call_end:]
 nav_host.write_text(nh)
 
 theme = root / "app/src/main/java/ir/rahyar/app/ui/theme/Theme.kt"
