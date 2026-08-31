@@ -1,0 +1,158 @@
+e(2 * 60 * 60 * 1000L) }
+         }
+@@ -118,6 +133,11 @@
+         destination = null
+         offRouteCount = 0
+         signalFusion.reset()
++        roadRefreshJob?.cancel()
++        roadRefreshJob = null
++        roadAwareness = RoadAwarenessSnapshot()
++        lastRoadRefreshMillis = 0L
++        lastRoadRefreshLocation = null
+         _hudState.value = NavigationHudState.Idle
+     }
+ 
+@@ -195,6 +215,7 @@
+             headingDifferenceDegrees = headingDifference
+         )
+         val offRoute = checkOffRoute(offRouteDecision, rawCurrent, dest, signal.speedMps)
++        maybeRefreshRoadAwareness(route, rawCurrent)
+ 
+         updateActive(
+             route = route,
+@@ -235,6 +256,12 @@
+             ?: route.steps.firstOrNull()?.instruction
+             ?: "ادامه مسیر"
+         val recalculating = rerouteJob?.isActive == true
++        val driverAlert = evaluateDriverAlert(
++            speedKmh = speedKmh,
++            speedLimitKmh = roadAwareness.speedLimitKmh,
++            roadEvents = roadAwareness.events,
++            isOffRoute = isOffRoute
++        )
+ 
+         _hudState.value = NavigationHudState.Active(
+             route = currentRoute ?: route,
+@@ -251,10 +278,46 @@
+             isRecalculating = recalculating,
+             isOffRoute = isOffRoute,
+             snappedToRoute = snappedToRoute,
+-            message = message
++            speedLimitKmh = roadAwareness.speedLimitKmh,
++            roadEvents = roadAwareness.events,
++            driverAlert = driverAlert,
++            message = message ?: driverAlert?.message
+         )
+     }
+ 
++    private fun maybeRefreshRoadAwareness(route: Route, currentLocation: LatLng) {
++        if (roadRefreshJob?.isActive == true) return
++        val now = System.currentTimeMillis()
++        val movedMeters = lastRoadRefreshLocation?.let { distanceMeters(it, currentLocation) } ?: Double.MAX_VALUE
++        if (now - lastRoadRefreshMillis < 20_000L && movedMeters < 350.0) return
++
++        lastRoadRefreshMillis = now
++        lastRoadRefreshLocation = currentLocation
++        roadRefreshJob = scope.launch {
++            runCatching { roadAwarenessRepository.getRoadAwareness(route, currentLocation) }
++                .onSuccess { snapshot ->
++                    if (snapshot.isLive) {
++                        roadAwareness = snapshot
++                        val active = _hudState.value as? NavigationHudState.Active
++                        if (active != null) {
++                            val alert = evaluateDriverAlert(
++                                speedKmh = active.speedKmh,
++                                speedLimitKmh = snapshot.speedLimitKmh,
++                                roadEvents = snapshot.events,
++                                isOffRoute = active.isOffRoute
++                            )
++                            _hudState.value = active.copy(
++                                speedLimitKmh = snapshot.speedLimitKmh,
++                                roadEvents = snapshot.events,
++                                driverAlert = alert,
++                                message = alert?.message ?: active.message
++                            )
++                        }
++                    }
++                }
++        }
++    }
++
+     private fun checkOffRoute(
+         decision: OffRouteDecision,
+         currentLocation: LatLng,
+@@ -297,6 +360,7 @@
+                 currentRoute = newRoute
+                 session.selectRoute(newRoute)
+                 offRouteCount = 0
++                lastRoadRefreshMillis = 0L
+                 rerouteCount++
+                 val active = _hudState.value as? NavigationHudState.Active
+                 if (active != null) {
+diff -ruN Run42Base/app/src/main/java/ir/rahyar/app/data/remote/RoadAwarenessApi.kt Run43Source/app/src/main/java/ir/rahyar/app/data/remote/RoadAwarenessApi.kt
+--- Run42Base/app/src/main/java/ir/rahyar/app/data/remote/RoadAwarenessApi.kt	1970-01-01 00:00:00.000000000 +0000
++++ Run43Source/app/src/main/java/ir/rahyar/app/data/remote/RoadAwarenessApi.kt	2026-08-31 04:30:48.575154474 +0000
+@@ -0,0 +1,196 @@
++package ir.rahyar.app.data.remote
++
++import ir.rahyar.app.domain.models.LatLng
++import ir.rahyar.app.domain.models.RoadAwarenessSnapshot
++import ir.rahyar.app.domain.models.RoadEvent
++import ir.rahyar.app.domain.models.RoadEventType
++import ir.rahyar.app.domain.models.Route
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.withContext
++import okhttp3.FormBody
++import okhttp3.OkHttpClient
++import okhttp3.Request
++import org.json.JSONArray
++import org.json.JSONObject
++import java.io.IOException
++import kotlin.math.atan2
++import kotlin.math.cos
++import kotlin.math.roundToInt
++import kotlin.math.sin
++import kotlin.math.sqrt
++
++interface RoadAwarenessApi {
++    suspend fun getRoadAwareness(route: Route, currentLocation: LatLng): RoadAwarenessSnapshot
++}
++
++class OverpassRoadAwarenessApi(
++    private val http: OkHttpClient
++) : RoadAwarenessApi {
++
++    override suspend fun getRoadAwareness(
++        route: Route,
++        currentLocation: LatLng
++    ): RoadAwarenessSnapshot = withContext(Dispatchers.IO) {
++        if (route.points.size < 2) return@withContext RoadAwarenessSnapshot()
++
++        val currentIndex = nearestRouteIndex(route.points, currentLocation)
++        val corridor = aheadRoutePoints(route.points, currentIndex, 6_000.0)
++        if (corridor.isEmpty()) return@withContext RoadAwarenessSnapshot()
++
++        val paddingLat = 0.006
++        val avgLat = corridor.map { it.latitude }.average()
++        val lngScale = cos(Math.toRadians(avgLat)).coerceAtLeast(0.35)
++        val paddingLng = paddingLat / lngScale
++        val south = corridor.minOf { it.latitude } - paddingLat
++        val north = corridor.maxOf { it.latitude } + paddingLat
++        val west = corridor.minOf { it.longitude } - paddingLng
++        val east = corridor.maxOf { it.longitude } + paddingLng
++        val bbox = "$south,$west,$north,$east"
++
++        val query = """
++            [out:json][timeout:10];
++            (
++              way["maxspeed"]($bbox);
++              node["highway"="speed_camera"]($bbox);
++              node["traffic_calming"~"^(bump|hump|table)$"]($bbox);
++              node["hazard"]($bbox);
++            );
++            out tags center geom;
++        """.trimIndent()
++
++        val body = FormBody.Builder().add("data", query).build()
++        val request = Request.Builder()
++            .url("https://overpass-api.de/api/interpre
