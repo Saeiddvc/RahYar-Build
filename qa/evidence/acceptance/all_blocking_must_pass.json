@@ -1,5 +1,5 @@
 {
-  "pass": true,
-  "details": "Run56 CI 33433689774 passed all 70 Blocking evidence checks after adding explicit regression coverage for the two previously field-rejected cases: an unambiguous car-shaped live marker and rejection of near-zero-distance GPS-jitter Trip Story. The standalone QA Evidence Gate now reports all Blocking items passed.",
-  "timestamp": "2026-08-31T20:07:00Z"
+  "pass": false,
+  "details": "69 of 70 blocking items are currently release-verified. The only remaining blocker is provider_manager.here_traffic_active because HERE_TRAFFIC_API_KEY is absent from repository Secrets/Variables and the authenticated live smoke cannot run.",
+  "timestamp": "2026-09-01T01:04:00+03:30"
 }
