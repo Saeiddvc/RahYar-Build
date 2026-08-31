@@ -1,5 +1,5 @@
 {
-  "pass": true,
-  "details": "Regression scan shows no feature loss, no degraded behavior, and no previously passing QA item has failed in Run48–Run49.",
-  "timestamp": "2026-08-31T22:19:00+03:30"
+  "pass": false,
+  "details": "FIELD REJECTED 2026-08-31: device screenshots expose regressions not covered by source-contract CI, including ambiguous/red-pin live-position rendering, a zero-distance GPS-jitter Trip Story, a world-scale Home map despite active location, and unreadable dark-state error styling. Acceptance remains blocked until corrected and field-verified.",
+  "timestamp": "2026-08-31T22:30:00+03:30"
 }
