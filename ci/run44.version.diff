@@ -1,0 +1,13 @@
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -16,8 +16,8 @@
+         applicationId = "ir.rahyar.app"
+         minSdk = 24
+         targetSdk = 34
+-        versionCode = 21
+-        versionName = "1.5.9-run43-road-awareness"
++        versionCode = 22
++        versionName = "1.6.0-run44-poi-stops"
+         buildConfigField("String", "ORS_API_KEY", ""${orsApiKey.escapeBuildConfig()}"")
+         buildConfigField("String", "HERE_API_KEY", ""${hereApiKey.escapeBuildConfig()}"")
+     }
