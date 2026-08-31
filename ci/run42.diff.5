@@ -1,0 +1,114 @@
+e = map.style?.getSource(VEHICLE_SOURCE_ID) as? GeoJsonSource ?: return
++    source.setGeoJson(vehicleFeature(location, bearing))
++}
++
++private fun vehicleFeature(location: LatLng, bearing: Float): Feature =
++    Feature.fromGeometry(Point.fromLngLat(location.longitude, location.latitude)).apply {
++        addNumberProperty("bearing", bearing)
++    }
++
++private fun drawableBitmap(context: android.content.Context, resId: Int): Bitmap? {
++    val drawable = ContextCompat.getDrawable(context, resId) ?: return null
++    val width = drawable.intrinsicWidth.coerceAtLeast(52)
++    val height = drawable.intrinsicHeight.coerceAtLeast(52)
++    return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
++        val canvas = Canvas(bitmap)
++        drawable.setBounds(0, 0, canvas.width, canvas.height)
++        drawable.draw(canvas)
++    }
++}
++
+ 
+ private fun geoDistanceMeters(a: LatLng, b: LatLng): Double {
+     val r = 6371000.0
+diff -ruN Run41Baseline/app/src/main/res/drawable/ic_vehicle_marker.xml Run41Source/project/app/src/main/res/drawable/ic_vehicle_marker.xml
+--- Run41Baseline/app/src/main/res/drawable/ic_vehicle_marker.xml	1970-01-01 00:00:00.000000000 +0000
++++ Run41Source/project/app/src/main/res/drawable/ic_vehicle_marker.xml	2026-08-31 04:20:54.601931866 +0000
+@@ -0,0 +1,22 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="52dp"
++    android:height="52dp"
++    android:viewportWidth="52"
++    android:viewportHeight="52">
++    <path
++        android:fillColor="#FFFFFF"
++        android:fillAlpha="0.96"
++        android:pathData="M26,2C12.75,2 2,12.75 2,26s10.75,24 24,24 24,-10.75 24,-24S39.25,2 26,2z"/>
++    <path
++        android:fillColor="#061A2E"
++        android:pathData="M18,10L34,10L40,34L36,42L32,42L31,38L21,38L20,42L16,42L12,34z"/>
++    <path
++        android:fillColor="#00D1D1"
++        android:pathData="M20,13L32,13L35,24L17,24zM16,27L36,27L37,34L15,34z"/>
++    <path
++        android:fillColor="#D9FFFF"
++        android:pathData="M21,16L31,16L33,22L19,22z"/>
++    <path
++        android:fillColor="#FFFFFF"
++        android:pathData="M18,29a2,2 0,1 0,0 4a2,2 0,1 0,0 -4M34,29a2,2 0,1 0,0 4a2,2 0,1 0,0 -4"/>
++</vector>
+diff -ruN Run41Baseline/app/src/test/java/ir/rahyar/app/core/navigation/NavigationSignalFusionTest.kt Run41Source/project/app/src/test/java/ir/rahyar/app/core/navigation/NavigationSignalFusionTest.kt
+--- Run41Baseline/app/src/test/java/ir/rahyar/app/core/navigation/NavigationSignalFusionTest.kt	1970-01-01 00:00:00.000000000 +0000
++++ Run41Source/project/app/src/test/java/ir/rahyar/app/core/navigation/NavigationSignalFusionTest.kt	2026-08-31 04:19:35.156627158 +0000
+@@ -0,0 +1,61 @@
++package ir.rahyar.app.core.navigation
++
++import ir.rahyar.app.domain.models.LatLng
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class NavigationSignalFusionTest {
++    @Test
++    fun staleFixIsRejected() {
++        val fusion = NavigationSignalFusion(maxFixAgeMillis = 4_000)
++        val fix = fusion.fuse(
++            NavigationSignalSample(LatLng(35.7, 51.4), 1_000, 10.0, 0.5, 90f, 5f, 8.0),
++            nowMillis = 6_000
++        )
++        assertNull(fix)
++    }
++
++    @Test
++    fun unreliableReportedSpeedUsesMovementSignal() {
++        val fusion = NavigationSignalFusion()
++        val t0 = 100_000L
++        fusion.fuse(NavigationSignalSample(LatLng(35.7000, 51.4000), t0, 5.0, 8.0, null, null, 7.0), t0)
++        val fix = fusion.fuse(NavigationSignalSample(LatLng(35.7009, 51.4000), t0 + 4_000, 5.0, 8.0, null, null, 7.0), t0 + 4_000)
++        assertNotNull(fix)
++        assertTrue(fix!!.speedMps > 15.0)
++        assertFalse(fix.usedReportedSpeed)
++    }
++
++    @Test
++    fun closeAlignedLocationSnapsToRoute() {
++        assertTrue(shouldSnapToRoute(7.0, 6.0, 12.0, 12f))
++    }
++
++    @Test
++    fun farLocationDoesNotSnapToRoute() {
++        assertFalse(shouldSnapToRoute(65.0, 7.0, 12.0, 10f))
++    }
++
++    @Test
++    fun largeCrossTrackErrorIsSevereOffRoute() {
++        val decision = evaluateOffRoute(95.0, 8.0, 20.0, 70f)
++        assertTrue(decision.candidate)
++        assertTrue(decision.severe)
++    }
++
++    @Test
++    fun interpolationUsesShortestBearingPath() {
++        val mid = interpolateBearing(350f, 10f, 0.5f)
++        assertTrue(mid < 2f || mid > 358f)
++    }
++
++    @Test
++    fun forwardPointMovesInHeadingDirection() {
++        val start = LatLng(35.7, 51.4)
++        val east = forwardPoint(start, 90f, 100.0)
++        assertTrue(east.longitude > start.longitude)
++    }
++}
