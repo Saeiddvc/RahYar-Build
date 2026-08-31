@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run51 CI 33368538531 verified the Start Navigation CTA is a persistent bottom overlay outside the route modal and is gated only by a valid selected route/blocking overlays.",
+  "timestamp": "2026-08-31T07:32:00Z"
+}
