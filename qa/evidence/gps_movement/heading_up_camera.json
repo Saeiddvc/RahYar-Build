@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "No verified automated evidence yet.",
-  "timestamp": "2026-08-31T07:43:02+03:30"
+  "pass": true,
+  "details": "Run49 CI 33365704532 passed headingUpCameraUsesVehicleBearing and camera source contracts. HEADING_UP uses the fused vehicle bearing and a forward look-ahead target derived from the live location.",
+  "timestamp": "2026-08-31T06:52:00Z"
 }
