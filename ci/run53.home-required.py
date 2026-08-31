@@ -27,6 +27,10 @@ copy_asset(
     "app/src/main/java/ir/rahyar/app/ui/screens/HomeScreen.kt"
 )
 copy_asset(
+    "run53.HomeDashboardOverlay.kt",
+    "app/src/main/java/ir/rahyar/app/ui/screens/HomeDashboardOverlay.kt"
+)
+copy_asset(
     "run53.PersianNumberFormatter.kt",
     "app/src/main/java/ir/rahyar/app/core/format/PersianNumberFormatter.kt"
 )
@@ -37,38 +41,66 @@ copy_asset(
 
 nav_host = root / "app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt"
 nh = nav_host.read_text()
-new_home = """HomeScreen(
+
+if "import androidx.compose.foundation.layout.Box" not in nh:
+    nh = nh.replace(
+        "package ir.rahyar.app.navigation\n\n",
+        "package ir.rahyar.app.navigation\n\n"
+        "import androidx.compose.foundation.layout.Box\n"
+        "import androidx.compose.ui.Alignment\n"
+        "import androidx.compose.ui.Modifier\n",
+        1
+    )
+
+if "import ir.rahyar.app.ui.screens.HomeDashboardOverlay" not in nh:
+    nh = nh.replace(
+        "import ir.rahyar.app.ui.screens.ActiveNavigationScreen\n",
+        "import ir.rahyar.app.ui.screens.ActiveNavigationScreen\n"
+        "import ir.rahyar.app.ui.screens.HomeDashboardOverlay\n",
+        1
+    )
+
+old_home_block = """        composable(Destinations.HOME) {
+            RahyarMapScreen(
+                locationProvider = locationProvider,
+                navigationSession = navigationSession,
+                routePreviewViewModel = routePreviewViewModel,
+                settingsRepository = settingsRepository,
+                providerManager = providerManager,
+                searchViewModel = destinationSearchViewModel,
+                onSettingsRequested = { navController.navigate(Destinations.SETTINGS) },
+                onStartNavigation = { navController.navigate(Destinations.ACTIVE_NAVIGATION) }
+            )
+        }"""
+
+new_home_block = """        composable(Destinations.HOME) {
+            Box {
+                RahyarMapScreen(
+                    locationProvider = locationProvider,
+                    navigationSession = navigationSession,
+                    routePreviewViewModel = routePreviewViewModel,
+                    settingsRepository = settingsRepository,
+                    providerManager = providerManager,
+                    searchViewModel = destinationSearchViewModel,
+                    onSettingsRequested = { navController.navigate(Destinations.SETTINGS) },
+                    onStartNavigation = { navController.navigate(Destinations.ACTIVE_NAVIGATION) }
+                )
+                HomeDashboardOverlay(
                     navController = navController,
                     locationProvider = locationProvider,
                     navigationSession = navigationSession,
                     destinationSearchRepository = destinationSearchRepository,
                     weatherRepository = weatherRepository,
-                    trafficRepository = trafficRepository
-                )"""
+                    trafficRepository = trafficRepository,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
+            }
+        }"""
 
-call_start = nh.find("HomeScreen(")
-if call_start < 0:
-    print("RUN53_NAVHOST_DUMP_START")
-    print(nh)
-    print("RUN53_NAVHOST_DUMP_END")
-    raise SystemExit("Run53 HomeScreen navigation call not found")
+if old_home_block not in nh:
+    raise SystemExit("Run53 HOME route block target missing")
 
-depth = 0
-call_end = None
-for index in range(call_start, len(nh)):
-    ch = nh[index]
-    if ch == "(":
-        depth += 1
-    elif ch == ")":
-        depth -= 1
-        if depth == 0:
-            call_end = index + 1
-            break
-
-if call_end is None:
-    raise SystemExit("Run53 HomeScreen navigation call is unbalanced")
-
-nh = nh[:call_start] + new_home + nh[call_end:]
+nh = nh.replace(old_home_block, new_home_block, 1)
 nav_host.write_text(nh)
 
 theme = root / "app/src/main/java/ir/rahyar/app/ui/theme/Theme.kt"
