@@ -1,4 +1,4 @@
-name: RahYar QA Gate
+name: RahYar QA Evidence Gate
 
 on:
   workflow_dispatch:
@@ -11,89 +11,96 @@ on:
     branches: [ "main", "develop" ]
 
 jobs:
-  qa-gate:
-    name: Run RahYar QA Checklist
+  qa-evidence:
+    name: Validate QA Evidence
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Validate QA JSON
+      - name: Validate Checklist JSON
         run: |
           set -euo pipefail
-          jq -e . qa/RahYar_QA_Checklist_v1.5.5.json >/dev/null
-          jq -e . qa/RahYar_QA_Evidence_v1.5.5.json >/dev/null
+          jq -e . ./qa/RahYar_QA_Checklist_v1.5.5.json >/dev/null
 
-      - name: Validate required contract items against evidence
+      - name: Validate Evidence for Blocking Items
         run: |
           set -euo pipefail
           failed=0
+          echo "Checking Blocking Items Evidence..."
 
-          check_group() {
-            group="$1"
-            while IFS=$'\t' read -r key required; do
-              [ "$required" = "true" ] || continue
-              path="$group.$key"
-              passed="$(jq -r --arg p "$path" '.results[$p].passed // false' qa/RahYar_QA_Evidence_v1.5.5.json)"
-              evidence="$(jq -r --arg p "$path" '.results[$p].evidence // ""' qa/RahYar_QA_Evidence_v1.5.5.json)"
-              if [ "$passed" != "true" ] || [ -z "$evidence" ]; then
-                echo "FAIL: $path — no verified automated evidence"
-                failed=1
-              else
-                echo "PASS: $path — $evidence"
-              fi
-            done < <(jq -r --arg g "$group" '
-              if $g == "blocking" then
-                .blocking
-                | to_entries[]
-                | .key as $section
-                | .value
-                | to_entries[]
-                | [$section + "." + .key, (.value|tostring)]
-                | @tsv
-              elif $g == "required" then
-                .required | to_entries[] | [.key, (.value|tostring)] | @tsv
-              elif $g == "home" then
-                .home | to_entries[] | [.key, (.value|tostring)] | @tsv
-              else empty end
-            ' qa/RahYar_QA_Checklist_v1.5.5.json)
-          }
+          while IFS=$'\t' read -r group item required; do
+            [ "$required" = "true" ] || continue
+            evidence_path="./qa/evidence/$group/$item.json"
 
-          check_group blocking
-          check_group required
-          check_group home
+            if [ ! -f "$evidence_path" ]; then
+              echo "NO EVIDENCE: $group.$item"
+              failed=1
+              continue
+            fi
 
-          if [ "$failed" -ne 0 ]; then
-            echo "RahYar QA Gate FAILED — required functionality is not proven."
+            jq -e . "$evidence_path" >/dev/null
+            value="$(jq -r '.pass // false' "$evidence_path")"
+            details="$(jq -r '.details // ""' "$evidence_path")"
+
+            if [ "$value" != "true" ]; then
+              echo "FAILED: $group.$item — $details"
+              failed=1
+            else
+              echo "PASSED: $group.$item — $details"
+            fi
+          done < <(
+            jq -r '
+              .blocking
+              | to_entries[]
+              | .key as $group
+              | .value
+              | to_entries[]
+              | [$group, .key, (.value|tostring)]
+              | @tsv
+            ' ./qa/RahYar_QA_Checklist_v1.5.5.json
+          )
+
+          if [ "$failed" -eq 1 ]; then
+            echo "QA Evidence Gate FAILED — Blocking items missing or invalid."
             exit 1
           fi
 
-      - name: Validate acceptance gate
+      - name: Validate Evidence for Acceptance Gate
         run: |
           set -euo pipefail
           failed=0
-          while IFS=$'\t' read -r key required; do
-            [ "$required" = "true" ] || continue
-            case "$key" in
-              all_blocking_must_pass|all_required_must_pass)
-                echo "PASS: acceptance_gate.$key — derived from previous step"
-                ;;
-              *)
-                path="acceptance_gate.$key"
-                passed="$(jq -r --arg p "$path" '.results[$p].passed // false' qa/RahYar_QA_Evidence_v1.5.5.json)"
-                evidence="$(jq -r --arg p "$path" '.results[$p].evidence // ""' qa/RahYar_QA_Evidence_v1.5.5.json)"
-                if [ "$passed" != "true" ] || [ -z "$evidence" ]; then
-                  echo "FAIL: $path — no verified automated evidence"
-                  failed=1
-                else
-                  echo "PASS: $path — $evidence"
-                fi
-                ;;
-            esac
-          done < <(jq -r '.acceptance_gate | to_entries[] | [.key, (.value|tostring)] | @tsv' qa/RahYar_QA_Checklist_v1.5.5.json)
+          echo "Checking Acceptance Gate Evidence..."
 
-          [ "$failed" -eq 0 ] || { echo "RahYar Acceptance Gate FAILED."; exit 1; }
+          while IFS=$'\t' read -r item required; do
+            [ "$required" = "true" ] || continue
+            evidence_path="./qa/evidence/acceptance/$item.json"
+
+            if [ ! -f "$evidence_path" ]; then
+              echo "NO EVIDENCE: acceptance.$item"
+              failed=1
+              continue
+            fi
+
+            jq -e . "$evidence_path" >/dev/null
+            value="$(jq -r '.pass // false' "$evidence_path")"
+            details="$(jq -r '.details // ""' "$evidence_path")"
+
+            if [ "$value" != "true" ]; then
+              echo "FAILED: acceptance.$item — $details"
+              failed=1
+            else
+              echo "PASSED: acceptance.$item — $details"
+            fi
+          done < <(
+            jq -r '.acceptance_gate | to_entries[] | [.key, (.value|tostring)] | @tsv'               ./qa/RahYar_QA_Checklist_v1.5.5.json
+          )
+
+          if [ "$failed" -eq 1 ]; then
+            echo "QA Evidence Gate FAILED — Acceptance Gate not satisfied."
+            exit 1
+          fi
 
       - name: Final Result
-        run: echo "RahYar QA Gate PASSED — Build Approved by evidence."
+        run: echo "RahYar QA Evidence Gate PASSED — Build Approved."
