@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "Run49 confirms the HUD consumes maneuver.distanceMeters, but no independent maneuver-distance geometry test has yet verified the calculation itself. This remains blocked.",
-  "timestamp": "2026-08-31T06:54:00Z"
+  "pass": true,
+  "details": "Run50 CI 33367559340 passed ManeuverGeometryTest and source contracts. Upcoming maneuver distance is computed as cumulative route-polyline distance from the current snapped progress to the maneuver location; turn geometry is summed along both legs, behind-user maneuvers are rejected, and the HUD consumes this verified value.",
+  "timestamp": "2026-08-31T07:18:00Z"
 }
