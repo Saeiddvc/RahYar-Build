@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run48 CI 33365317648 passed JourneySeparationTest.tripSummaryComesOnlyFromTripTrace. buildTripSummary accepts only TripTrace and derives actual distance, duration, average speed, and max speed from trace points.",
+  "timestamp": "2026-08-31T06:46:00Z"
+}
