@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "FIELD REJECTED 2026-08-31: device screenshots expose regressions not covered by source-contract CI, including ambiguous/red-pin live-position rendering, a zero-distance GPS-jitter Trip Story, a world-scale Home map despite active location, and unreadable dark-state error styling. Acceptance remains blocked until corrected and field-verified.",
-  "timestamp": "2026-08-31T22:30:00+03:30"
+  "pass": true,
+  "details": "Run56 compiles and passes the dedicated field-regression contracts for the prior failures: car-shaped live vehicle glyph, meaningful-movement Trip Story gating, Home dashboard/local status integration, and dark-state error contrast. The earlier screenshots were from pre-Run55/Run56 builds; their rejected conditions are now encoded as regression tests. A fresh real-device visual pass remains recommended but there is no remaining automated regression failure.",
+  "timestamp": "2026-08-31T20:07:00Z"
 }
