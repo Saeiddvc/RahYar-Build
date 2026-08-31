@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run49 CI 33365704532 passed fusedSpeedIsConvertedDirectlyToHudKmh. HUD speed is fed from the fused NavigationSignal speed through displaySpeedKmh rather than raw delayed Location.speed display logic.",
+  "timestamp": "2026-08-31T06:52:00Z"
+}
