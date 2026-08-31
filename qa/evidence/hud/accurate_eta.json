@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run49 CI 33365704532 passed etaUsesRemainingRouteFraction and compile. NavigationEngine now uses estimateRemainingMinutes from planned route duration/distance and live remaining route distance.",
+  "timestamp": "2026-08-31T06:52:00Z"
+}
