@@ -1,0 +1,135 @@
+ter")
++            .header("User-Agent", "RahYar/1.5.8 Android")
++            .post(body)
++            .build()
++
++        http.newCall(request).execute().use { response ->
++            if (!response.isSuccessful) throw IOException("Overpass HTTP ${response.code}")
++            val json = JSONObject(response.body?.string().orEmpty())
++            parseSnapshot(json, route, currentLocation, currentIndex)
++        }
++    }
++
++    private fun parseSnapshot(
++        json: JSONObject,
++        route: Route,
++        currentLocation: LatLng,
++        currentIndex: Int
++    ): RoadAwarenessSnapshot {
++        val elements = json.optJSONArray("elements") ?: JSONArray()
++        var bestSpeedLimit: Pair<Int, Double>? = null
++        val events = mutableListOf<RoadEvent>()
++
++        for (i in 0 until elements.length()) {
++            val element = elements.optJSONObject(i) ?: continue
++            val tags = element.optJSONObject("tags") ?: JSONObject()
++            when (element.optString("type")) {
++                "way" -> {
++                    val speedLimit = parseMaxSpeed(tags.optString("maxspeed")) ?: continue
++                    val geometry = element.optJSONArray("geometry") ?: continue
++                    val wayPoints = buildList {
++                        for (j in 0 until geometry.length()) {
++                            val point = geometry.optJSONObject(j) ?: continue
++                            if (!point.has("lat") || !point.has("lon")) continue
++                            add(LatLng(point.optDouble("lat"), point.optDouble("lon")))
++                        }
++                    }
++                    if (wayPoints.size < 2) continue
++                    val distanceToWay = wayPoints.minOf { distanceMeters(currentLocation, it) }
++                    if (distanceToWay <= 55.0 && (bestSpeedLimit == null || distanceToWay < bestSpeedLimit!!.second)) {
++                        bestSpeedLimit = speedLimit to distanceToWay
++                    }
++                }
++
++                "node" -> {
++                    if (!element.has("lat") || !element.has("lon")) continue
++                    val point = LatLng(element.optDouble("lat"), element.optDouble("lon"))
++                    val eventType = when {
++                        tags.optString("highway") == "speed_camera" -> RoadEventType.SPEED_CAMERA
++                        tags.optString("traffic_calming") in setOf("bump", "hump", "table") -> RoadEventType.SPEED_BUMP
++                        tags.has("hazard") -> RoadEventType.HAZARD
++                        else -> null
++                    } ?: continue
++
++                    val routeIndex = nearestRouteIndex(route.points, point)
++                    if (routeIndex + 1 < currentIndex) continue
++                    val distanceFromRoute = distanceMeters(point, route.points[routeIndex])
++                    if (distanceFromRoute > 130.0) continue
++                    val aheadDistance = distanceAlongRouteMeters(route.points, currentIndex, routeIndex, currentLocation)
++                    if (aheadDistance !in 0.0..2_500.0) continue
++
++                    val title = when (eventType) {
++                        RoadEventType.SPEED_CAMERA -> "دوربین کنترل سرعت"
++                        RoadEventType.SPEED_BUMP -> "سرعت‌گیر"
++                        RoadEventType.HAZARD -> tags.optString("hazard").takeIf { it.isNotBlank() }?.let { "خطر جاده: $it" } ?: "خطر جاده"
++                    }
++                    events += RoadEvent(
++                        id = "osm_${element.optLong("id", i.toLong())}",
++                        type = eventType,
++                        location = point,
++                        title = title,
++                        distanceAheadMeters = aheadDistance.roundToInt(),
++                        source = "OpenStreetMap"
++                    )
++                }
++            }
++        }
++
++        return RoadAwarenessSnapshot(
++            speedLimitKmh = bestSpeedLimit?.first,
++            events = events.distinctBy { it.id }.sortedBy { it.distanceAheadMeters }.take(20),
++            isLive = true,
++            source = "OpenStreetMap/Overpass"
++        )
++    }
++
++    private fun parseMaxSpeed(value: String): Int? {
++        if (value.isBlank()) return null
++        val numeric = Regex("""\d{1,3}""").find(value)?.value?.toIntOrNull() ?: return null
++        if (numeric !in 10..160) return null
++        return if (value.contains("mph", ignoreCase = true)) (numeric * 1.609344).roundToInt() else numeric
++    }
++}
++
++private fun aheadRoutePoints(points: List<LatLng>, startIndex: Int, maxDistanceMeters: Double): List<LatLng> {
++    if (points.isEmpty()) return emptyList()
++    val result = mutableListOf(points[startIndex.coerceIn(0, points.lastIndex)])
++    var distance = 0.0
++    var index = startIndex.coerceIn(0, points.lastIndex)
++    while (index < points.lastIndex && distance < maxDistanceMeters) {
++        distance += distanceMeters(points[index], points[index + 1])
++        result += points[index + 1]
++        index++
++    }
++    return result
++}
++
++private fun nearestRouteIndex(points: List<LatLng>, point: LatLng): Int =
++    points.indices.minByOrNull { distanceMeters(points[it], point) } ?: 0
++
++private fun distanceAlongRouteMeters(
++    points: List<LatLng>,
++    currentIndex: Int,
++    targetIndex: Int,
++    currentLocation: LatLng
++): Double {
++    if (points.isEmpty()) return Double.MAX_VALUE
++    if (targetIndex < currentIndex) return Double.MAX_VALUE
++    var total = distanceMeters(currentLocation, points[currentIndex.coerceIn(0, points.lastIndex)])
++    for (i in currentIndex.coerceAtLeast(0) until targetIndex.coerceAtMost(points.lastIndex)) {
++        if (i >= points.lastIndex) break
++        total += distanceMeters(points[i], points[i + 1])
++    }
++    return total
++}
++
++private fun distanceMeters(a: LatLng, b: LatLng): Double {
++    val radius = 6_371_000.0
++    val dLat = Math.toRadians(b.latitude - a.latitude)
++    val dLon = Math.toRadians(b.longitude - a.longitude)
++    val lat1 = Math.toRadians(a.latitude)
++    val lat2 = Math.toRadians(b.latitude)
++    val h = sin(dLat / 2) * sin(dLat / 2) + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2)
++    return radius * 2 * atan2(sqrt(h), sqrt(1 - h))
++}
+diff -ruN Run42Base/app/src/main/java/ir/rahyar/app/data/repository/RoadAwarenessRepositoryImpl.kt Run43Source/app/src/main/java/ir/rahyar/app/data/repository/RoadAwarenessRepositoryImpl.kt
