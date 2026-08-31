@@ -1,0 +1,179 @@
+{
+  "schema_version": "1.5.5",
+  "policy": "Any blocking=false or acceptance_gate=false rejects the build. Required=false is a review warning.",
+  "blocking": {
+    "font_typography": {
+      "iransans_fanum_regular_only": false,
+      "iransans_fanum_medium_only": false,
+      "iransans_fanum_bold_only": false,
+      "no_other_ui_font": false,
+      "persian_digits": false,
+      "persian_decimal_separator": false,
+      "no_system_default_font": false
+    },
+    "waypoint": {
+      "original_destination_preserved": false,
+      "stop_added_to_itinerary_not_new_destination": false,
+      "itinerary_uses_itinerary_stop": false,
+      "stop_status_flow_works": false,
+      "waypoint_segments_have_independent_visuals": false,
+      "stop_number_visible_on_map": false,
+      "total_eta_and_distance_recalculated": false,
+      "auto_continue_after_stop_arrival": false,
+      "navigation_session_not_ended_at_stop": false
+    },
+    "mid_route_poi": {
+      "prd_categories_only": false,
+      "on_route_filtering": false,
+      "ahead_of_user_filtering": false,
+      "remote_city_results_rejected": false,
+      "distance_from_route_calculated": false,
+      "detour_distance_calculated": false,
+      "detour_duration_calculated": false,
+      "is_ahead_of_user_calculated": false,
+      "poi_converts_to_itinerary_stop": false,
+      "original_destination_preserved_after_poi": false
+    },
+    "quick_settings": {
+      "not_empty": false,
+      "voice_guidance_enabled_works": false,
+      "voice_alerts_enabled_works": false,
+      "map_view_mode_works": false,
+      "show_traffic_works": false,
+      "avoid_traffic_zone_works": false,
+      "avoid_pollution_zone_works": false,
+      "avoid_toll_roads_works": false,
+      "reroute_on_heavy_traffic_works": false,
+      "reroute_on_severe_weather_works": false,
+      "speed_limit_alerts_enabled_works": false,
+      "every_visible_toggle_changes_engine_behavior": false,
+      "start_navigation_cta_sticky": false
+    },
+    "home": {
+      "home_place_exists": false,
+      "work_place_exists": false,
+      "saved_places_exist": false,
+      "fuel_shortcut_exists": false,
+      "rest_area_shortcut_exists": false,
+      "food_cafe_shortcut_exists": false,
+      "toilet_shortcut_exists": false,
+      "parking_shortcut_exists": false,
+      "hospital_shortcut_exists": false,
+      "sightseeing_shortcut_exists": false,
+      "recent_destinations_exist": false,
+      "saved_trips_exist": false,
+      "weather_status_exists": false,
+      "traffic_status_exists": false
+    },
+    "route_preview": {
+      "recommended_plus_max_two_alternatives": false,
+      "all_routes_fully_visible": false,
+      "safe_camera_padding_applied": false,
+      "route_selection_activates_start_cta": false,
+      "selected_alternative_highlighted": false,
+      "selected_route_high_contrast": false,
+      "alternatives_visually_secondary": false,
+      "waypoint_segments_visually_distinct": false,
+      "no_heavy_noisy_outline": false
+    },
+    "navigation_hud": {
+      "natural_persian_maneuver": false,
+      "maneuver_distance_correct": false,
+      "eta_correct": false,
+      "vehicle_speed_correct_and_timely": false,
+      "speed_limit_shown_when_available": false,
+      "destination_pin_not_primary_focus": false,
+      "true_heading_up_camera": false,
+      "look_ahead_active": false,
+      "off_route_detection_works": false,
+      "reroute_after_off_route_works": false,
+      "smooth_vehicle_marker_motion": false,
+      "vehicle_marker_not_destination_pin": false
+    },
+    "trip_story": {
+      "generated_only_from_real_trip_trace": false,
+      "no_trace_message_is_exact": false,
+      "actual_route_included": false,
+      "actual_stops_included": false,
+      "weather_timeline_included": false,
+      "traffic_timeline_included": false,
+      "road_type_included": false,
+      "media_included": false,
+      "driver_view_exists": false,
+      "aerial_view_exists": false,
+      "route_overview_exists": false,
+      "effects_require_real_data": false
+    },
+    "provider_manager": {
+      "ors_uses_api_heigit_org": false,
+      "osrm_fallback_active": false,
+      "here_traffic_validated": false,
+      "low_traffic_requires_valid_here_data": false,
+      "open_meteo_validated": false,
+      "photon_search_works": false,
+      "nominatim_fallback_works": false,
+      "reverse_geocoding_works": false,
+      "provider_health_latency_quota_managed": false,
+      "no_fabricated_data": false
+    },
+    "state_separation": {
+      "route_summary_only_from_route": false,
+      "trip_summary_only_from_trip_trace": false,
+      "navigation_session_separate_from_route": false,
+      "trip_story_not_built_from_route": false,
+      "no_shared_state_leakage": false
+    },
+    "driver_intelligence": {
+      "road_events_and_static_hazards_supported": false,
+      "camera_and_speed_bump_alerts_supported_when_data_available": false,
+      "speed_limit_detection_supported": false,
+      "approaching_speed_limit_warning_supported": false,
+      "overspeed_warning_supported": false,
+      "driving_duration_monitoring_supported": false,
+      "driving_quality_monitoring_supported": false,
+      "contextual_rest_suggestion_supported": false,
+      "weather_awareness_during_navigation": false,
+      "severe_weather_alerting_supported": false,
+      "mid_route_services_one_tap_accessible": false
+    },
+    "search_quality": {
+      "local_bias_uses_current_location": false,
+      "named_place_exact_match_prioritized": false,
+      "city_and_region_relevance_checked": false,
+      "bank_shahr_building_2_acceptance_case_passes": false
+    },
+    "location_fusion": {
+      "fused_location_provider_used": false,
+      "speed_accuracy_checked": false,
+      "bearing_accuracy_checked": false,
+      "stale_fix_rejected": false,
+      "location_smoothing_applied": false,
+      "map_matching_applied_without_wrong_main_road_snap": false
+    }
+  },
+  "required": {
+    "rtl_complete": false,
+    "mode_chips_not_cut": false,
+    "long_press_precise_destination": false,
+    "no_sheet_jump": false,
+    "no_start_navigation_hang": false,
+    "no_route_preview_crash": false
+  },
+  "acceptance_gate": {
+    "all_blocking_passed": false,
+    "all_required_reviewed": false,
+    "no_new_regression": false,
+    "no_prd_feature_removed": false,
+    "iransans_fanum_only": false,
+    "stop_preserves_destination": false,
+    "poi_no_remote_city_results": false,
+    "quick_settings_operational": false,
+    "trip_story_not_from_route": false,
+    "safe_camera_padding_applied": false,
+    "start_navigation_cta_always_visible": false,
+    "off_route_reroute_operational": false,
+    "speed_and_speed_limit_pipeline_operational": false,
+    "weather_context_operational": false,
+    "search_relevance_acceptance_cases_pass": false
+  }
+}
