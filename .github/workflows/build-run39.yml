@@ -330,8 +330,8 @@ jobs:
 
           sed -i 's/versionCode = 21/versionCode = 35/' app/build.gradle.kts
           sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.7.3-run57-final-font-structure"/' app/build.gradle.kts
-          grep -q 'versionCode = 34' app/build.gradle.kts
-          grep -q 'versionName = "1.7.2-run56-final-regression"' app/build.gradle.kts
+          grep -q 'versionCode = 35' app/build.gradle.kts
+          grep -q 'versionName = "1.7.3-run57-final-font-structure"' app/build.gradle.kts
 
       - name: Final field-regression source checks
         working-directory: project
@@ -689,7 +689,7 @@ jobs:
           HERE_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
         run: gradle testDebugUnitTest assembleDebug --stacktrace
 
-      - name: Upload Run55 APK candidate
+      - name: Upload Run57 APK candidate
         uses: actions/upload-artifact@v4
         with:
           name: RahYar-1.7.3-Run57-APK-Candidate
