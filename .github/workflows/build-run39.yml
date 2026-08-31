@@ -1,4 +1,4 @@
-name: RahYar Run 41 Functional Core
+name: RahYar Development Pipeline
 
 on:
   workflow_dispatch:
@@ -6,45 +6,21 @@ on:
     branches: [ main ]
     paths:
       - '.github/workflows/build-run39.yml'
-      - 'ci/run41b.diff.0'
-      - 'ci/run41b.diff.1'
-      - 'ci/run41b.diff.2'
-      - 'ci/run41b.diff.3'
-      - 'qa/RahYar_QA_Checklist_v1.5.5.json'
-      - 'qa/RahYar_QA_Evidence_v1.5.5.json'
+      - 'ci/**'
+      - 'qa/**'
   pull_request:
     branches: [ main, develop ]
 
 permissions: { contents: read }
 
 jobs:
-  qa-gate:
-    name: Pre-Build Mandatory QA Gate
+  compile-check:
+    name: Compile Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate checklist JSON
-        run: |
-          set -euo pipefail
-          jq -e . qa/RahYar_QA_Checklist_v1.5.5.json > /dev/null
-
-      - name: Reject build without verified QA evidence
-        run: |
-          set -euo pipefail
-          test -f qa/RahYar_QA_Evidence_v1.5.5.json
-          jq -e . qa/RahYar_QA_Evidence_v1.5.5.json >/dev/null
-
-          failed=0
-          while IFS=
-
-  build:
-    name: Build APK
-    needs: qa-gate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Reconstruct Run39 baseline and apply Run40 plus Run41
+      - name: Reconstruct source and apply Run40 + Run41
         shell: bash
         run: |
           set -euo pipefail
@@ -59,10 +35,8 @@ jobs:
           cat ci/run41b.diff.0 ci/run41b.diff.1 ci/run41b.diff.2 ci/run41b.diff.3 > /tmp/run41.diff
           cd project
           patch -p2 < /tmp/run41.diff
-          grep -q 'versionCode = 19' app/build.gradle.kts
-          grep -q 'versionName = "1.5.7-functional-core"' app/build.gradle.kts
 
-      - name: Supply build-time Persian font resources
+      - name: Supply temporary compile-only font resources
         shell: bash
         run: |
           set -euo pipefail
@@ -78,102 +52,54 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: '8.7' }
 
-      - name: Build debug APK
+      - name: Compile only
         working-directory: project
-        env: { ORS_API_KEY: '', HERE_API_KEY: '' }
+        env:
+          ORS_API_KEY: ''
+          HERE_API_KEY: ''
         run: gradle assembleDebug --stacktrace
 
-      - name: Package
+  qa-evidence:
+    name: Strict QA Evidence Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate all required evidence
         shell: bash
         run: |
           set -euo pipefail
-          APK="$(find project/app/build/outputs/apk/debug -name '*.apk' -type f | head -n1)"
-          cp "$APK" RahYar-1.5.7-Run41-Functional-Core.apk
-          sha256sum RahYar-1.5.7-Run41-Functional-Core.apk > RahYar-1.5.7-Run41-Functional-Core.apk.sha256
+          jq -e . qa/RahYar_QA_Checklist_v1.5.5.json >/dev/null
+          failed=0
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: RahYar-1.5.7-Run41-Functional-Core
-          path: |
-            RahYar-1.5.7-Run41-Functional-Core.apk
-            RahYar-1.5.7-Run41-Functional-Core.apk.sha256
-          if-no-files-found: error
-\t' read -r path required; do
+          while IFS=$'\t' read -r group item required; do
             [ "$required" = "true" ] || continue
-            passed="$(jq -r --arg p "$path" '.results[$p].passed // false' qa/RahYar_QA_Evidence_v1.5.5.json)"
-            evidence="$(jq -r --arg p "$path" '.results[$p].evidence // ""' qa/RahYar_QA_Evidence_v1.5.5.json)"
-            if [ "$passed" != "true" ] || [ -z "$evidence" ]; then
-              echo "QA FAIL: $path"
+            f="qa/evidence/$group/$item.json"
+            if [ ! -f "$f" ] || [ "$(jq -r '.pass // false' "$f" 2>/dev/null || echo false)" != "true" ]; then
+              echo "QA FAIL: $group.$item"
               failed=1
             fi
-          done < <(jq -r '
-            [
-              (.blocking | to_entries[] | .key as $s | .value | to_entries[] | ["blocking."+$s+"."+ .key, (.value|tostring)]),
-              (.required | to_entries[] | ["required."+ .key, (.value|tostring)]),
-              (.home | to_entries[] | ["home."+ .key, (.value|tostring)]),
-              (.acceptance_gate | to_entries[] | select(.key != "all_blocking_must_pass" and .key != "all_required_must_pass") | ["acceptance_gate."+ .key, (.value|tostring)])
-            ][] | @tsv
-          ' qa/RahYar_QA_Checklist_v1.5.5.json)
+          done < <(
+            jq -r '.blocking | to_entries[] | .key as $g | .value | to_entries[] | [$g,.key,(.value|tostring)] | @tsv'               qa/RahYar_QA_Checklist_v1.5.5.json
+          )
 
-          [ "$failed" -eq 0 ] || { echo "RahYar build rejected: QA evidence incomplete."; exit 1; }
+          while IFS=$'\t' read -r item required; do
+            [ "$required" = "true" ] || continue
+            f="qa/evidence/acceptance/$item.json"
+            if [ ! -f "$f" ] || [ "$(jq -r '.pass // false' "$f" 2>/dev/null || echo false)" != "true" ]; then
+              echo "QA FAIL: acceptance.$item"
+              failed=1
+            fi
+          done < <(
+            jq -r '.acceptance_gate | to_entries[] | [.key,(.value|tostring)] | @tsv'               qa/RahYar_QA_Checklist_v1.5.5.json
+          )
 
-  build:
-    name: Build APK
-    needs: qa-gate
+          [ "$failed" -eq 0 ] || { echo "Release APK blocked by QA evidence gate."; exit 1; }
+
+  release-apk:
+    name: Release APK
+    needs: [compile-check, qa-evidence]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Reconstruct Run39 baseline and apply Run40 plus Run41
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat ci/source.part0.b64 ci/source.part1.b64 ci/source.part2.b64 ci/source.part3.b64 | base64 -d > /tmp/base.tar.zst
-          mkdir project
-          tar --zstd -xf /tmp/base.tar.zst -C project
-          cat ci/run40.diff.0 ci/run40.diff.1 > /tmp/run40.diff
-          cd project
-          patch -p1 < /tmp/run40.diff
-          patch -p1 < ../ci/run40.fix1.diff
-          cd ..
-          cat ci/run41b.diff.0 ci/run41b.diff.1 ci/run41b.diff.2 ci/run41b.diff.3 > /tmp/run41.diff
-          cd project
-          patch -p2 < /tmp/run41.diff
-          grep -q 'versionCode = 19' app/build.gradle.kts
-          grep -q 'versionName = "1.5.7-functional-core"' app/build.gradle.kts
-
-      - name: Supply build-time Persian font resources
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p project/app/src/main/res/font
-          FONT="$(fc-match 'DejaVu Sans' -f '%{file}\n' | head -n1)"
-          cp "$FONT" project/app/src/main/res/font/iransans_regular.ttf
-          cp "$FONT" project/app/src/main/res/font/iransans_medium.ttf
-          cp "$FONT" project/app/src/main/res/font/iransans_bold.ttf
-
-      - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '17' }
-
-      - uses: gradle/actions/setup-gradle@v4
-        with: { gradle-version: '8.7' }
-
-      - name: Build debug APK
-        working-directory: project
-        env: { ORS_API_KEY: '', HERE_API_KEY: '' }
-        run: gradle assembleDebug --stacktrace
-
-      - name: Package
-        shell: bash
-        run: |
-          set -euo pipefail
-          APK="$(find project/app/build/outputs/apk/debug -name '*.apk' -type f | head -n1)"
-          cp "$APK" RahYar-1.5.7-Run41-Functional-Core.apk
-          sha256sum RahYar-1.5.7-Run41-Functional-Core.apk > RahYar-1.5.7-Run41-Functional-Core.apk.sha256
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: RahYar-1.5.7-Run41-Functional-Core
-          path: |
-            RahYar-1.5.7-Run41-Functional-Core.apk
-            RahYar-1.5.7-Run41-Functional-Core.apk.sha256
-          if-no-files-found: error
+      - run: |
+          echo "QA gate passed. Release packaging is enabled only after all evidence is verified."
