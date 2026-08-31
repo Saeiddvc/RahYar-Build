@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run47 CI 33363937265 passed FallbackDirectionsApiTest and a live OSRM route smoke. A primary routing failure falls through to the observed OSRM provider.",
+  "timestamp": "2026-08-31T06:25:00Z"
+}
