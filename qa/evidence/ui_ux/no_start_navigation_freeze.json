@@ -1,0 +1,5 @@
+{
+  "pass": true,
+  "details": "Run51 CI 33368538531 passed rapidDoubleStartIsRejectedButRetryDoesNotFreeze and resetAllowsImmediateRetryAfterSynchronousFailure. Both sticky and sheet Start actions use the shared StartNavigationGate, suppress rapid duplicate navigation while allowing retry after debounce or synchronous failure.",
+  "timestamp": "2026-08-31T07:31:00Z"
+}
