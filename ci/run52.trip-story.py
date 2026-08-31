@@ -4,7 +4,7 @@ import shutil
 root = Path(".")
 
 def copy_asset(name, target):
-    src = root.parent / "ci" / name
+    src = Path(__file__).resolve().parent / name
     dst = root / target
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, dst)
