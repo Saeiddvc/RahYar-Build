@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "No verified automated evidence yet.",
-  "timestamp": "2026-08-31T07:43:02+03:30"
+  "pass": true,
+  "details": "Run42 CI 33357073252 passed NavigationSignalFusion unit tests for aligned near-route snap and far-route rejection; source contract check confirms engine uses shouldSnapToRoute.",
+  "timestamp": "2026-08-31T07:58:00+03:30"
 }
