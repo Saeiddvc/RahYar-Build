@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "No verified automated evidence yet.",
-  "timestamp": "2026-08-31T07:43:02+03:30"
+  "pass": true,
+  "details": "Run43 CI 33361103057 passed off-route alert priority tests; off-route detection was already independently verified in Run42.",
+  "timestamp": "2026-08-31T05:38:00Z"
 }
