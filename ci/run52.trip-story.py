@@ -28,13 +28,15 @@ copy_asset(
 
 nav_host = root / "app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt"
 nh = nav_host.read_text()
-target = """                weatherRepository = weatherRepository,
+target = """                roadAwarenessRepository = roadAwarenessRepository,
+                weatherRepository = weatherRepository,
                 navigationSession = navigationSession"""
-replacement = """                weatherRepository = weatherRepository,
+replacement = """                roadAwarenessRepository = roadAwarenessRepository,
+                weatherRepository = weatherRepository,
                 trafficRepository = trafficRepository,
                 navigationSession = navigationSession"""
 if target not in nh:
-    raise SystemExit("Run52 RahyarNavHost traffic target missing")
+    raise SystemExit("Run52 RahyarNavHost ActiveNavigation traffic target missing")
 nh = nh.replace(target, replacement, 1)
 nav_host.write_text(nh)
 
