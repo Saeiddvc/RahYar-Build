@@ -47,6 +47,7 @@ jobs:
           cat ci/run43.diff.0 ci/run43.diff.1 ci/run43.diff.2 ci/run43.diff.3 ci/run43.diff.4 ci/run43.diff.5 > /tmp/run43.diff
           cd project
           patch -p1 < /tmp/run43.diff
+          patch -p1 < ../ci/run43.fix1.diff
 
           grep -q 'versionCode = 21' app/build.gradle.kts
           grep -q 'versionName = "1.5.9-run43-road-awareness"' app/build.gradle.kts
