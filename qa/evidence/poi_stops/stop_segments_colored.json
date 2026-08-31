@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "Independent colored route segments for each itinerary stop are not yet verified. Release remains blocked on this item.",
-  "timestamp": "2026-08-31T05:54:00Z"
+  "pass": true,
+  "details": "Run44 CI 33362461697 passed RouteSegmentPlannerTest and source contract checks. Pending itinerary stops split the active route into independent polylines with distinct segment colors; arrived/skipped stops no longer split the active route.",
+  "timestamp": "2026-08-31T06:03:00Z"
 }
