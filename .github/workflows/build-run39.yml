@@ -82,6 +82,16 @@ jobs:
           grep -q 'ic_speed_bump' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
           grep -q 'ic_road_hazard' app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
 
+      - name: Live speed-limit provider smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          QUERY='[out:json][timeout:15];way["maxspeed"](35.68,51.35,35.75,51.45);out tags 5;'
+          curl --fail --silent --show-error --retry 2 --max-time 35             --data-urlencode "data=$QUERY"             https://overpass-api.de/api/interpreter > /tmp/overpass-speed.json
+          jq -e '.elements | length > 0' /tmp/overpass-speed.json >/dev/null
+          jq -e '[.elements[].tags.maxspeed? | select(. != null and . != "")] | length > 0' /tmp/overpass-speed.json >/dev/null
+          echo "Overpass speed-limit provider returned live maxspeed data."
+
       - name: Supply temporary compile-only font resources
         shell: bash
         run: |
