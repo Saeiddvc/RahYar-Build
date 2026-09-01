@@ -14,7 +14,7 @@ jobs:
     name: Run57 Strict Final Release Gate
     runs-on: ubuntu-latest
     env:
-      HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
+      TOMTOM_TRAFFIC_API_KEY: ${{ secrets.TOMTOM_TRAFFIC_API_KEY }}
 
     steps:
       - name: Checkout Repository
@@ -37,27 +37,34 @@ jobs:
             .acceptance_gate.allow_partial_release == false
           ' qa/RahYar_Run57_FinalRelease.json >/dev/null
 
-      - name: Require HERE Traffic Credential
+      - name: Require TomTom Traffic Credential
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${HERE_TRAFFIC_API_KEY:-}" ]; then
-            echo "::error::HERE_TRAFFIC_API_KEY is not configured."
+          if [ -z "${TOMTOM_TRAFFIC_API_KEY:-}" ]; then
+            echo "::error::TOMTOM_TRAFFIC_API_KEY is not configured."
             exit 1
           fi
-          echo "::add-mask::${HERE_TRAFFIC_API_KEY}"
-          echo "HERE credential is configured."
+          echo "::add-mask::${TOMTOM_TRAFFIC_API_KEY}"
+          echo "TomTom credential is configured."
 
-      - name: Authenticated HERE Traffic Live Smoke
+      - name: Authenticated TomTom Traffic Live Smoke for Tehran and Karaj
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --retry 2 --max-time 35 \
-            "https://data.traffic.hereapi.com/v7/flow?in=bbox:50.94,35.81,51.01,35.84&locationReferencing=shape&apiKey=${HERE_TRAFFIC_API_KEY}" \
-            > /tmp/here-traffic.json
-          jq -e '.results | type == "array"' /tmp/here-traffic.json >/dev/null
-          jq -e '.results | length > 0' /tmp/here-traffic.json >/dev/null
-          echo "Authenticated HERE Traffic returned live flow data."
+          for city in tehran karaj; do
+            case "$city" in
+              tehran) point='35.7219,51.3347' ;;
+              karaj) point='35.8327,50.9916' ;;
+            esac
+            curl --fail --silent --show-error --retry 2 --max-time 35 \
+              "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?point=${point}&unit=KMPH&openLr=false&key=${TOMTOM_TRAFFIC_API_KEY}" \
+              > "/tmp/tomtom-${city}.json"
+            jq -e '.flowSegmentData.currentSpeed | type == "number"' "/tmp/tomtom-${city}.json" >/dev/null
+            jq -e '.flowSegmentData.freeFlowSpeed | type == "number"' "/tmp/tomtom-${city}.json" >/dev/null
+            jq -e '.flowSegmentData.coordinates.coordinate | length >= 2' "/tmp/tomtom-${city}.json" >/dev/null
+          done
+          echo "Authenticated TomTom Traffic returned live flow data for Tehran and Karaj."
 
       - name: Reject Compile-only Placeholder Fonts From Final Release
         shell: bash
