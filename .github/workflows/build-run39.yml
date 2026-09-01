@@ -718,30 +718,26 @@ jobs:
           set -euo pipefail
           for city in tehran karaj; do
             case "$city" in
-              tehran) points='35.7000,51.3370 35.7210,51.4100 35.7448,51.3752 35.7392,51.4733' ;;
-              karaj) points='35.8327,50.9916 35.8069,50.9581 35.8400,50.9391 35.7789,50.9065' ;;
+              tehran) tile='12/2632/1612' ;;
+              karaj) tile='12/2627/1611' ;;
             esac
-            matched=false
-            for point in $points; do
-              http_code="$(curl --silent --show-error --retry 2 --max-time 35 \
-                -o "/tmp/tomtom-${city}.json" -w '%{http_code}' \
-                "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?point=${point}&unit=KMPH&openLr=false&key=${TOMTOM_TRAFFIC_API_KEY}" \
-              )"
-              if [ "$http_code" = "200" ]; then
-                matched=true
-                echo "TomTom matched ${city} traffic at ${point}."
-                break
-              fi
-              echo "TomTom did not match ${city} point ${point}: HTTP ${http_code}"
-              jq -c '.' "/tmp/tomtom-${city}.json" 2>/dev/null || head -c 500 "/tmp/tomtom-${city}.json"
-            done
-            if [ "$matched" != "true" ]; then
-              echo "No TomTom live traffic segment was found for any tested ${city} road point."
+            http_code="$(curl --silent --show-error --retry 2 --max-time 35 \
+              -H "TomTom-Api-Key: ${TOMTOM_TRAFFIC_API_KEY}" \
+              -H 'TomTom-Api-Version: 2' \
+              -H 'Accept: application/vnd.mapbox-vector-tile' \
+              -D "/tmp/tomtom-${city}.headers" \
+              -o "/tmp/tomtom-${city}.pbf" -w '%{http_code}' \
+              "https://api.tomtom.com/maps/orbis/traffic/flow/vector/tile/${tile}?apiVersion=2" \
+            )"
+            if [ "$http_code" != "200" ]; then
+              echo "TomTom Orbis flow tile failed for ${city}: HTTP ${http_code}"
+              head -c 500 "/tmp/tomtom-${city}.pbf"
               exit 1
             fi
-            jq -e '.flowSegmentData.currentSpeed | type == "number"' "/tmp/tomtom-${city}.json" >/dev/null
-            jq -e '.flowSegmentData.freeFlowSpeed | type == "number"' "/tmp/tomtom-${city}.json" >/dev/null
-            jq -e '.flowSegmentData.coordinates.coordinate | length >= 2' "/tmp/tomtom-${city}.json" >/dev/null
+            grep -qi 'content-type: application/vnd.mapbox-vector-tile' "/tmp/tomtom-${city}.headers"
+            test -s "/tmp/tomtom-${city}.pbf"
+            strings "/tmp/tomtom-${city}.pbf" | grep -q 'relative_speed'
+            echo "TomTom Orbis returned a non-empty live flow vector tile for ${city}."
           done
           echo "Authenticated TomTom Traffic returned live flow data for Tehran and Karaj."
 
