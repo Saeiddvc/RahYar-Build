@@ -18,7 +18,7 @@ jobs:
     name: Run57 Compile + Unit Tests
     runs-on: ubuntu-latest
     env:
-      HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
+      TOMTOM_TRAFFIC_API_KEY: ${{ secrets.TOMTOM_TRAFFIC_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -327,6 +327,7 @@ jobs:
           python3 ../ci/run54.fonts-final.py
           python3 ../ci/run55.field-quality.py
           python3 ../ci/run56.field-regression.py
+          python3 ../ci/run57.tomtom-traffic.py
 
           sed -i 's/versionCode = 21/versionCode = 35/' app/build.gradle.kts
           sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.7.3-run57-final-font-structure"/' app/build.gradle.kts
@@ -567,7 +568,8 @@ jobs:
           grep -q 'FallbackDirectionsApi(primary = ors, fallback = osrm)' app/src/main/java/ir/rahyar/app/di/AppModule.kt
           grep -q 'ObservedDirectionsApi(ProviderTelemetry.OSRM' app/src/main/java/ir/rahyar/app/di/AppModule.kt
           grep -q 'ObservedWeatherApi(ProviderTelemetry.OPEN_METEO' app/src/main/java/ir/rahyar/app/di/AppModule.kt
-          grep -q 'ObservedTrafficApi(ProviderTelemetry.HERE_TRAFFIC' app/src/main/java/ir/rahyar/app/di/AppModule.kt
+          grep -q 'ObservedTrafficApi(ProviderTelemetry.TOMTOM_TRAFFIC' app/src/main/java/ir/rahyar/app/di/AppModule.kt
+          grep -q 'TomTomTrafficApi(http, it)' app/src/main/java/ir/rahyar/app/di/AppModule.kt
           grep -q 'ProviderTelemetry.PHOTON' app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
           grep -q 'ProviderTelemetry.NOMINATIM' app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
           grep -q 'successTracksLatencyAndQuota' app/src/test/java/ir/rahyar/app/core/provider/ProviderTelemetryTest.kt
@@ -686,7 +688,7 @@ jobs:
         working-directory: project
         env:
           ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
-          HERE_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
+          TOMTOM_TRAFFIC_API_KEY: ${{ secrets.TOMTOM_TRAFFIC_API_KEY }}
         run: gradle testDebugUnitTest assembleDebug --stacktrace
 
       - name: Upload Run57 APK candidate
@@ -697,28 +699,36 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Require HERE Traffic credential for release
+      - name: Require TomTom Traffic credential for release
         env:
-          HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
+          TOMTOM_TRAFFIC_API_KEY: ${{ secrets.TOMTOM_TRAFFIC_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "$HERE_TRAFFIC_API_KEY" ]; then
-            echo "HERE_TRAFFIC_API_KEY is not configured; candidate was built but final release remains blocked."
+          if [ -z "$TOMTOM_TRAFFIC_API_KEY" ]; then
+            echo "TOMTOM_TRAFFIC_API_KEY is not configured; candidate was built but final release remains blocked."
             exit 1
           fi
 
-      - name: Live HERE Traffic authenticated smoke
+      - name: Live TomTom Traffic authenticated smoke for Tehran and Karaj
         env:
-          HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
+          TOMTOM_TRAFFIC_API_KEY: ${{ secrets.TOMTOM_TRAFFIC_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --max-time 35 \
-            "https://data.traffic.hereapi.com/v7/flow?in=bbox:50.94,35.81,51.01,35.84&locationReferencing=shape&apiKey=$HERE_TRAFFIC_API_KEY" \
-            > /tmp/here-traffic.json
-          jq -e '.results | type == "array" and length >= 0' /tmp/here-traffic.json >/dev/null
-          echo "Authenticated HERE Traffic request succeeded."
+          for city in tehran karaj; do
+            case "$city" in
+              tehran) point='35.7219,51.3347' ;;
+              karaj) point='35.8327,50.9916' ;;
+            esac
+            curl --fail --silent --show-error --retry 2 --max-time 35 \
+              "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?point=${point}&unit=KMPH&openLr=false&key=${TOMTOM_TRAFFIC_API_KEY}" \
+              > "/tmp/tomtom-${city}.json"
+            jq -e '.flowSegmentData.currentSpeed | type == "number"' "/tmp/tomtom-${city}.json" >/dev/null
+            jq -e '.flowSegmentData.freeFlowSpeed | type == "number"' "/tmp/tomtom-${city}.json" >/dev/null
+            jq -e '.flowSegmentData.coordinates.coordinate | length >= 2' "/tmp/tomtom-${city}.json" >/dev/null
+          done
+          echo "Authenticated TomTom Traffic returned live flow data for Tehran and Karaj."
 
   qa-evidence:
     name: Strict QA Evidence Gate
