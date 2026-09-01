@@ -721,7 +721,7 @@ jobs:
               tehran) tile='12/2632/1612' ;;
               karaj) tile='12/2627/1611' ;;
             esac
-            http_code="$(curl --silent --show-error --retry 2 --max-time 35 \
+            http_code="$(curl --compressed --silent --show-error --retry 2 --max-time 35 \
               -H "TomTom-Api-Key: ${TOMTOM_TRAFFIC_API_KEY}" \
               -H 'TomTom-Api-Version: 2' \
               -H 'Accept: application/vnd.mapbox-vector-tile' \
@@ -736,6 +736,7 @@ jobs:
             fi
             grep -qi 'content-type: application/vnd.mapbox-vector-tile' "/tmp/tomtom-${city}.headers"
             test -s "/tmp/tomtom-${city}.pbf"
+            echo "TomTom ${city} tile bytes: $(wc -c < "/tmp/tomtom-${city}.pbf")"
             strings "/tmp/tomtom-${city}.pbf" | grep -q 'relative_speed'
             echo "TomTom Orbis returned a non-empty live flow vector tile for ${city}."
           done
