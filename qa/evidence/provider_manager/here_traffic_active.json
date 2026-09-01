@@ -1,5 +1,0 @@
-{
-  "pass": false,
-  "details": "Run57 source, compile, provider wiring, and all non-HERE checks pass, but the release workflow proves HERE_TRAFFIC_API_KEY is not configured. The authenticated HERE Traffic smoke is therefore not executable for the final build. This item remains blocked until a valid credential is configured and the live v7/flow request passes.",
-  "timestamp": "2026-09-01T01:04:00+03:30"
-}
