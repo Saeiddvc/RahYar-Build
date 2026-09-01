@@ -3,7 +3,7 @@ name: RahYar QA Evidence Gate
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "develop" ]
+    branches: [ "main", "develop", "codex/run57-neshan-traffic" ]
     paths:
       - "qa/**"
       - ".github/workflows/qa-gate.yml"
