@@ -721,9 +721,15 @@ jobs:
               tehran) point='35.7219,51.3347' ;;
               karaj) point='35.8327,50.9916' ;;
             esac
-            curl --fail --silent --show-error --retry 2 --max-time 35 \
+            http_code="$(curl --silent --show-error --retry 2 --max-time 35 \
+              -o "/tmp/tomtom-${city}.json" -w '%{http_code}' \
               "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?point=${point}&unit=KMPH&openLr=false&key=${TOMTOM_TRAFFIC_API_KEY}" \
-              > "/tmp/tomtom-${city}.json"
+            )"
+            if [ "$http_code" != "200" ]; then
+              echo "TomTom Flow Segment Data failed for ${city}: HTTP ${http_code}"
+              jq -c '.' "/tmp/tomtom-${city}.json" 2>/dev/null || head -c 500 "/tmp/tomtom-${city}.json"
+              exit 1
+            fi
             jq -e '.flowSegmentData.currentSpeed | type == "number"' "/tmp/tomtom-${city}.json" >/dev/null
             jq -e '.flowSegmentData.freeFlowSpeed | type == "number"' "/tmp/tomtom-${city}.json" >/dev/null
             jq -e '.flowSegmentData.coordinates.coordinate | length >= 2' "/tmp/tomtom-${city}.json" >/dev/null
