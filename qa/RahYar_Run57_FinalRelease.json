@@ -8,7 +8,7 @@
   "release_gate": "STRICT",
   "release_status": "BLOCKED",
   "known_blockers": [
-    "authenticated_here_traffic_live_smoke",
+    "authenticated_tomtom_traffic_live_smoke_tehran_karaj",
     "ci_compile_placeholder_fonts_must_not_be_promoted_to_final_release"
   ],
   "acceptance_gate": {
@@ -25,8 +25,10 @@
     "require_16k_native_alignment": true,
     "require_final_apk_sha256": true
   },
-  "here_policy": {
-    "credential_env": "HERE_TRAFFIC_API_KEY",
+  "traffic_provider_policy": {
+    "provider": "TomTom Traffic Flow Segment Data",
+    "credential_env": "TOMTOM_TRAFFIC_API_KEY",
+    "required_test_locations": ["Tehran", "Karaj"],
     "authenticated_live_request_required": true,
     "placeholder_or_static_evidence_accepted": false
   }
