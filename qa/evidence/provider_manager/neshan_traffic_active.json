@@ -1,0 +1,5 @@
+{
+  "pass": false,
+  "details": "Neshan is wired as the primary live traffic provider. Release remains blocked until authenticated GitHub Actions calls both live and no-traffic routing endpoints for Tehran and Karaj and validates non-empty routes, positive durations, and route geometry.",
+  "timestamp": "2026-09-01T00:00:00Z"
+}
