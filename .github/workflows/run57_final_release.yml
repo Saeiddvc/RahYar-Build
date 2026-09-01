@@ -1,0 +1,112 @@
+name: RahYar Run57 – Final Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v1.7.3-run57*'
+
+permissions:
+  contents: read
+
+jobs:
+  final-release:
+    name: Run57 Strict Final Release Gate
+    runs-on: ubuntu-latest
+    env:
+      HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Enforce Run57 Contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '
+            .product == "RahYar" and
+            .package == "ir.rahyar.app" and
+            .version == "1.7.3" and
+            .versionCode == 35 and
+            .versionName == "1.7.3-run57-final-font-structure" and
+            .run == "Run57-FinalRelease" and
+            .release_gate == "STRICT" and
+            .acceptance_gate.must_pass_all_steps == true and
+            .acceptance_gate.final_release_condition == "ALL_STEPS_PASS" and
+            .acceptance_gate.allow_partial_release == false
+          ' qa/RahYar_Run57_FinalRelease.json >/dev/null
+
+      - name: Require HERE Traffic Credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${HERE_TRAFFIC_API_KEY:-}" ]; then
+            echo "::error::HERE_TRAFFIC_API_KEY is not configured."
+            exit 1
+          fi
+          echo "::add-mask::${HERE_TRAFFIC_API_KEY}"
+          echo "HERE credential is configured."
+
+      - name: Authenticated HERE Traffic Live Smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 2 --max-time 35 \
+            "https://data.traffic.hereapi.com/v7/flow?in=bbox:50.94,35.81,51.01,35.84&locationReferencing=shape&apiKey=${HERE_TRAFFIC_API_KEY}" \
+            > /tmp/here-traffic.json
+          jq -e '.results | type == "array"' /tmp/here-traffic.json >/dev/null
+          jq -e '.results | length > 0' /tmp/here-traffic.json >/dev/null
+          echo "Authenticated HERE Traffic returned live flow data."
+
+      - name: Reject Compile-only Placeholder Fonts From Final Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Fq "fc-match 'DejaVu Sans'" .github/workflows/build-run39.yml; then
+            echo "::error::Development workflow still injects DejaVu Sans as compile-only font resources. This candidate must not be promoted to Final Release."
+            exit 1
+          fi
+          if grep -Fq 'Supply temporary compile-only font resources' .github/workflows/build-run39.yml; then
+            echo "::error::Compile-only font substitution is still present in the development workflow."
+            exit 1
+          fi
+
+      - name: Validate Strict QA Evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e . qa/RahYar_QA_Checklist_v1.5.5.json >/dev/null
+          failed=0
+
+          while IFS=$'\t' read -r group item required; do
+            [ "$required" = "true" ] || continue
+            file="qa/evidence/$group/$item.json"
+            if [ ! -f "$file" ] || [ "$(jq -r '.pass // false' "$file" 2>/dev/null || echo false)" != "true" ]; then
+              echo "QA FAIL: $group.$item"
+              failed=1
+            fi
+          done < <(
+            jq -r '.blocking | to_entries[] | .key as $g | .value | to_entries[] | [$g,.key,(.value|tostring)] | @tsv' qa/RahYar_QA_Checklist_v1.5.5.json
+          )
+
+          while IFS=$'\t' read -r item required; do
+            [ "$required" = "true" ] || continue
+            file="qa/evidence/acceptance/$item.json"
+            if [ ! -f "$file" ] || [ "$(jq -r '.pass // false' "$file" 2>/dev/null || echo false)" != "true" ]; then
+              echo "QA FAIL: acceptance.$item"
+              failed=1
+            fi
+          done < <(
+            jq -r '.acceptance_gate | to_entries[] | [.key,(.value|tostring)] | @tsv' qa/RahYar_QA_Checklist_v1.5.5.json
+          )
+
+          [ "$failed" -eq 0 ] || exit 1
+          echo "All strict QA evidence is PASS."
+
+      - name: Final Release Packaging Guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Run57 strict gates passed to packaging boundary."
+          echo "Final APK packaging is permitted only from an authoritative source build containing the approved IRANSans FaNum binaries."
