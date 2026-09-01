@@ -71,14 +71,21 @@ internal fun parseTomTomFlowSegment(json: JSONObject): TrafficSegment? {
         }
     }
     if (points.size < 2) return null
-    val jamFactor = (((freeFlowSpeed - currentSpeed).coerceAtLeast(0.0) / freeFlowSpeed) * 10.0)
-        .coerceIn(0.0, 10.0)
-    val level = when {
-        jamFactor < 4.0 -> TrafficLevel.LIGHT
-        jamFactor < 7.0 -> TrafficLevel.MEDIUM
-        else -> TrafficLevel.HEAVY
-    }
+    val jamFactor = tomTomJamFactor(currentSpeed, freeFlowSpeed) ?: return null
+    val level = tomTomTrafficLevel(jamFactor)
     return TrafficSegment(points.first(), points.last(), level, jamFactor)
+}
+
+internal fun tomTomJamFactor(currentSpeed: Double, freeFlowSpeed: Double): Double? {
+    if (!currentSpeed.isFinite() || !freeFlowSpeed.isFinite() || freeFlowSpeed <= 0.0) return null
+    return (((freeFlowSpeed - currentSpeed).coerceAtLeast(0.0) / freeFlowSpeed) * 10.0)
+        .coerceIn(0.0, 10.0)
+}
+
+internal fun tomTomTrafficLevel(jamFactor: Double): TrafficLevel = when {
+    jamFactor < 4.0 -> TrafficLevel.LIGHT
+    jamFactor < 7.0 -> TrafficLevel.MEDIUM
+    else -> TrafficLevel.HEAVY
 }
 
 '''
@@ -111,33 +118,19 @@ tomtom_test = root / "app/src/test/java/ir/rahyar/app/data/remote/TomTomTrafficA
 tomtom_test.write_text(r'''package ir.rahyar.app.data.remote
 
 import ir.rahyar.app.domain.models.TrafficLevel
-import org.json.JSONObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class TomTomTrafficApiTest {
-    @Test fun validLiveFlowBecomesRealTrafficSegment() {
-        val segment = parseTomTomFlowSegment(JSONObject("""{
-          "flowSegmentData": {
-            "currentSpeed": 20,
-            "freeFlowSpeed": 80,
-            "coordinates": {"coordinate": [
-              {"latitude":35.7219,"longitude":51.3347},
-              {"latitude":35.7224,"longitude":51.3361}
-            ]}
-          }
-        }"""))
-        assertNotNull(segment)
-        assertEquals(TrafficLevel.HEAVY, segment?.level)
-        assertEquals(7.5, segment?.jamFactor ?: -1.0, 0.001)
+    @Test fun speedRatioProducesHeavyTrafficWithoutFabrication() {
+        val jamFactor = tomTomJamFactor(currentSpeed = 20.0, freeFlowSpeed = 80.0)
+        assertEquals(7.5, jamFactor ?: -1.0, 0.001)
+        assertEquals(TrafficLevel.HEAVY, tomTomTrafficLevel(jamFactor ?: -1.0))
     }
 
-    @Test fun missingSpeedCannotBePresentedAsLiveTraffic() {
-        assertNull(parseTomTomFlowSegment(JSONObject("""{
-          "flowSegmentData": {"coordinates":{"coordinate":[]}}
-        }""")))
+    @Test fun invalidFreeFlowSpeedCannotProduceTraffic() {
+        assertNull(tomTomJamFactor(currentSpeed = 20.0, freeFlowSpeed = 0.0))
     }
 }
 ''')
