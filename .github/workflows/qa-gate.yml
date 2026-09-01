@@ -102,19 +102,29 @@ jobs:
             exit 1
           fi
 
-      - name: Validate live HERE Traffic credential
+      - name: Validate live TomTom Traffic credential
         env:
-          HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
+          TOMTOM_TRAFFIC_API_KEY: ${{ secrets.TOMTOM_TRAFFIC_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "$HERE_TRAFFIC_API_KEY" ]; then
-            echo "QA LIVE FAIL: HERE_TRAFFIC_API_KEY is not configured."
+          if [ -z "$TOMTOM_TRAFFIC_API_KEY" ]; then
+            echo "QA LIVE FAIL: TOMTOM_TRAFFIC_API_KEY is not configured."
             exit 1
           fi
-          curl --fail --silent --show-error --max-time 35             "https://data.traffic.hereapi.com/v7/flow?in=bbox:50.94,35.81,51.01,35.84&locationReferencing=shape&apiKey=$HERE_TRAFFIC_API_KEY"             > /tmp/here-traffic.json
-          jq -e '.results | type == "array"' /tmp/here-traffic.json >/dev/null
-          echo "PASSED: provider_manager.here_traffic_active — authenticated HERE Traffic returned a valid response."
+          for city in tehran karaj; do
+            case "$city" in
+              tehran) point='35.7219,51.3347' ;;
+              karaj) point='35.8327,50.9916' ;;
+            esac
+            curl --fail --silent --show-error --retry 2 --max-time 35 \
+              "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?point=${point}&unit=KMPH&openLr=false&key=${TOMTOM_TRAFFIC_API_KEY}" \
+              > "/tmp/tomtom-${city}.json"
+            jq -e '.flowSegmentData.currentSpeed | type == "number"' "/tmp/tomtom-${city}.json" >/dev/null
+            jq -e '.flowSegmentData.freeFlowSpeed | type == "number"' "/tmp/tomtom-${city}.json" >/dev/null
+            jq -e '.flowSegmentData.coordinates.coordinate | length >= 2' "/tmp/tomtom-${city}.json" >/dev/null
+          done
+          echo "PASSED: provider_manager.tomtom_traffic_active — authenticated TomTom Traffic returned valid live responses for Tehran and Karaj."
 
       - name: Final Result
         run: echo "RahYar QA Evidence Gate PASSED — Build Approved."
