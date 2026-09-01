@@ -1,0 +1,33 @@
+{
+  "product": "RahYar",
+  "package": "ir.rahyar.app",
+  "version": "1.7.3",
+  "versionCode": 35,
+  "versionName": "1.7.3-run57-final-font-structure",
+  "run": "Run57-FinalRelease",
+  "release_gate": "STRICT",
+  "release_status": "BLOCKED",
+  "known_blockers": [
+    "authenticated_here_traffic_live_smoke",
+    "ci_compile_placeholder_fonts_must_not_be_promoted_to_final_release"
+  ],
+  "acceptance_gate": {
+    "must_pass_all_steps": true,
+    "qa_evidence_required": "70/70",
+    "final_release_condition": "ALL_STEPS_PASS",
+    "allow_partial_release": false
+  },
+  "artifact_policy": {
+    "compile_only_candidate_is_release_artifact": false,
+    "require_real_iransans_fanum_in_final_apk": true,
+    "require_modern_apk_signature": true,
+    "require_zip_integrity": true,
+    "require_16k_native_alignment": true,
+    "require_final_apk_sha256": true
+  },
+  "here_policy": {
+    "credential_env": "HERE_TRAFFIC_API_KEY",
+    "authenticated_live_request_required": true,
+    "placeholder_or_static_evidence_accepted": false
+  }
+}
