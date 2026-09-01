@@ -1,0 +1,5 @@
+{
+  "pass": false,
+  "details": "TomTom Traffic is wired as the primary live traffic provider. Release remains blocked until GitHub Actions performs authenticated Flow Segment Data requests for both Tehran and Karaj and validates speed plus road geometry in each response.",
+  "timestamp": "2026-09-01T00:00:00Z"
+}
