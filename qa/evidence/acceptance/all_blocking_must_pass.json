@@ -1,5 +1,5 @@
 {
   "pass": false,
-  "details": "69 of 70 blocking items are currently release-verified. The only remaining blocker is provider_manager.here_traffic_active because HERE_TRAFFIC_API_KEY is absent from repository Secrets/Variables and the authenticated live smoke cannot run.",
+  "details": "69 of 70 blocking items are currently release-verified. The remaining traffic blocker is provider_manager.tomtom_traffic_active until authenticated GitHub Actions smoke tests return valid live flow data for both Tehran and Karaj.",
   "timestamp": "2026-09-01T01:04:00+03:30"
 }
