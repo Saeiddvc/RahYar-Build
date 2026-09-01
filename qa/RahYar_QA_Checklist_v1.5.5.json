@@ -80,7 +80,7 @@
     "provider_manager": {
       "ors_new_endpoint": true,
       "osrm_fallback": true,
-      "here_traffic_active": true,
+      "tomtom_traffic_active": true,
       "open_meteo_active": true,
       "photon_active": true,
       "nominatim_fallback": true,
