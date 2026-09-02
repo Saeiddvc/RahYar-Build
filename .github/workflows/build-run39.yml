@@ -18,7 +18,7 @@ jobs:
     name: Run57 Compile + Unit Tests
     runs-on: ubuntu-latest
     env:
-      HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
+      NESHAN_API_KEY: ${{ secrets.NESHAN_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -327,6 +327,7 @@ jobs:
           python3 ../ci/run54.fonts-final.py
           python3 ../ci/run55.field-quality.py
           python3 ../ci/run56.field-regression.py
+          python3 ../ci/run57.neshan-traffic.py
 
           sed -i 's/versionCode = 21/versionCode = 35/' app/build.gradle.kts
           sed -i 's/versionName = "1.5.9-run43-road-awareness"/versionName = "1.7.3-run57-final-font-structure"/' app/build.gradle.kts
@@ -567,7 +568,8 @@ jobs:
           grep -q 'FallbackDirectionsApi(primary = ors, fallback = osrm)' app/src/main/java/ir/rahyar/app/di/AppModule.kt
           grep -q 'ObservedDirectionsApi(ProviderTelemetry.OSRM' app/src/main/java/ir/rahyar/app/di/AppModule.kt
           grep -q 'ObservedWeatherApi(ProviderTelemetry.OPEN_METEO' app/src/main/java/ir/rahyar/app/di/AppModule.kt
-          grep -q 'ObservedTrafficApi(ProviderTelemetry.HERE_TRAFFIC' app/src/main/java/ir/rahyar/app/di/AppModule.kt
+          grep -q 'ObservedTrafficApi(ProviderTelemetry.NESHAN_TRAFFIC' app/src/main/java/ir/rahyar/app/di/AppModule.kt
+          grep -q 'NeshanTrafficApi(http, it)' app/src/main/java/ir/rahyar/app/di/AppModule.kt
           grep -q 'ProviderTelemetry.PHOTON' app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
           grep -q 'ProviderTelemetry.NOMINATIM' app/src/main/java/ir/rahyar/app/data/repository/DestinationSearchRepositoryImpl.kt
           grep -q 'successTracksLatencyAndQuota' app/src/test/java/ir/rahyar/app/core/provider/ProviderTelemetryTest.kt
@@ -666,15 +668,17 @@ jobs:
           jq -e '[.elements[].tags.maxspeed? | select(. != null and . != "")] | length > 0' /tmp/overpass-speed.json >/dev/null
           echo "Overpass speed-limit provider returned live maxspeed data."
 
-      - name: Supply temporary compile-only font resources
+      - name: Install approved IRANSans FaNum resources
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p project/app/src/main/res/font
-          FONT="$(fc-match 'DejaVu Sans' -f '%{file}\n' | head -n1)"
-          cp "$FONT" project/app/src/main/res/font/iransans_fanum_regular.ttf
-          cp "$FONT" project/app/src/main/res/font/iransans_fanum_medium.ttf
-          cp "$FONT" project/app/src/main/res/font/iransans_fanum_bold.ttf
+          echo '1df818a6b400da053448a007729d548436e76bdee48d52647bc2ed69a6ff62f9  ci/fonts/iransans_fanum_regular.ttf' | sha256sum --check
+          echo 'd8ab70132d0e59cd873a1fa212a6ae8b2867495a013fa55484615c360ce74cc0  ci/fonts/iransans_fanum_medium.ttf' | sha256sum --check
+          echo '96d8e88e864c66c15447f27429711f6c3e5d14c5d9d633edd2bf6c22f870dd19  ci/fonts/iransans_fanum_bold.ttf' | sha256sum --check
+          install -m 0644 ci/fonts/iransans_fanum_regular.ttf project/app/src/main/res/font/iransans_fanum_regular.ttf
+          install -m 0644 ci/fonts/iransans_fanum_medium.ttf project/app/src/main/res/font/iransans_fanum_medium.ttf
+          install -m 0644 ci/fonts/iransans_fanum_bold.ttf project/app/src/main/res/font/iransans_fanum_bold.ttf
 
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17' }
@@ -686,8 +690,12 @@ jobs:
         working-directory: project
         env:
           ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
-          HERE_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
+          NESHAN_API_KEY: ${{ secrets.NESHAN_API_KEY }}
         run: gradle testDebugUnitTest assembleDebug --stacktrace
+
+      - name: Verify release-grade APK contents
+        shell: bash
+        run: python3 ci/verify_run57_apk.py project/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload Run57 APK candidate
         uses: actions/upload-artifact@v4
@@ -697,28 +705,45 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Require HERE Traffic credential for release
+      - name: Require Neshan Traffic credential for release
         env:
-          HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
+          NESHAN_API_KEY: ${{ secrets.NESHAN_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "$HERE_TRAFFIC_API_KEY" ]; then
-            echo "HERE_TRAFFIC_API_KEY is not configured; candidate was built but final release remains blocked."
+          if [ -z "$NESHAN_API_KEY" ]; then
+            echo "NESHAN_API_KEY is not configured; candidate was built but final release remains blocked."
             exit 1
           fi
 
-      - name: Live HERE Traffic authenticated smoke
+      - name: Live Neshan Traffic authenticated smoke for Tehran and Karaj
         env:
-          HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
+          NESHAN_API_KEY: ${{ secrets.NESHAN_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --max-time 35 \
-            "https://data.traffic.hereapi.com/v7/flow?in=bbox:50.94,35.81,51.01,35.84&locationReferencing=shape&apiKey=$HERE_TRAFFIC_API_KEY" \
-            > /tmp/here-traffic.json
-          jq -e '.results | type == "array" and length >= 0' /tmp/here-traffic.json >/dev/null
-          echo "Authenticated HERE Traffic request succeeded."
+          for city in tehran karaj; do
+            case "$city" in
+              tehran) origin='35.7210,51.4100'; destination='35.7448,51.3752' ;;
+              karaj) origin='35.8327,50.9916'; destination='35.8069,50.9581' ;;
+            esac
+            for mode in live baseline; do
+              if [ "$mode" = live ]; then endpoint='https://api.neshan.org/v4/direction'; else endpoint='https://api.neshan.org/v4/direction/no-traffic'; fi
+              http_code="$(curl --silent --show-error --retry 2 --max-time 35 \
+                -H "Api-Key: ${NESHAN_API_KEY}" \
+                -o "/tmp/neshan-${city}-${mode}.json" -w '%{http_code}' \
+                "${endpoint}?type=car&origin=${origin}&destination=${destination}&alternative=false&avoidTrafficZone=false&avoidOddEvenZone=false")"
+              if [ "$http_code" != "200" ]; then
+                echo "Neshan ${mode} routing failed for ${city}: HTTP ${http_code}"
+                jq -c '.' "/tmp/neshan-${city}-${mode}.json" 2>/dev/null || head -c 500 "/tmp/neshan-${city}-${mode}.json"
+                exit 1
+              fi
+              jq -e '.routes | type == "array" and length > 0' "/tmp/neshan-${city}-${mode}.json" >/dev/null
+              jq -e '[.routes[0].legs[].duration.value] | length > 0 and all(. > 0)' "/tmp/neshan-${city}-${mode}.json" >/dev/null
+              jq -e '.routes[0].overview_polyline.points | type == "string" and length > 0' "/tmp/neshan-${city}-${mode}.json" >/dev/null
+            done
+          done
+          echo "Authenticated Neshan returned live and baseline traffic-aware routes for Tehran and Karaj."
 
   qa-evidence:
     name: Strict QA Evidence Gate

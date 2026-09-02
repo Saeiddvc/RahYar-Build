@@ -14,7 +14,7 @@ jobs:
     name: Run57 Strict Final Release Gate
     runs-on: ubuntu-latest
     env:
-      HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
+      NESHAN_API_KEY: ${{ secrets.NESHAN_API_KEY }}
 
     steps:
       - name: Checkout Repository
@@ -37,40 +37,48 @@ jobs:
             .acceptance_gate.allow_partial_release == false
           ' qa/RahYar_Run57_FinalRelease.json >/dev/null
 
-      - name: Require HERE Traffic Credential
+      - name: Require Neshan Traffic Credential
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${HERE_TRAFFIC_API_KEY:-}" ]; then
-            echo "::error::HERE_TRAFFIC_API_KEY is not configured."
+          if [ -z "${NESHAN_API_KEY:-}" ]; then
+            echo "::error::NESHAN_API_KEY is not configured."
             exit 1
           fi
-          echo "::add-mask::${HERE_TRAFFIC_API_KEY}"
-          echo "HERE credential is configured."
+          echo "::add-mask::${NESHAN_API_KEY}"
+          echo "Neshan credential is configured."
 
-      - name: Authenticated HERE Traffic Live Smoke
+      - name: Authenticated Neshan Traffic Live Smoke for Tehran and Karaj
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --retry 2 --max-time 35 \
-            "https://data.traffic.hereapi.com/v7/flow?in=bbox:50.94,35.81,51.01,35.84&locationReferencing=shape&apiKey=${HERE_TRAFFIC_API_KEY}" \
-            > /tmp/here-traffic.json
-          jq -e '.results | type == "array"' /tmp/here-traffic.json >/dev/null
-          jq -e '.results | length > 0' /tmp/here-traffic.json >/dev/null
-          echo "Authenticated HERE Traffic returned live flow data."
+          for city in tehran karaj; do
+            case "$city" in
+              tehran) origin='35.7210,51.4100'; destination='35.7448,51.3752' ;;
+              karaj) origin='35.8327,50.9916'; destination='35.8069,50.9581' ;;
+            esac
+            for mode in live baseline; do
+              if [ "$mode" = live ]; then endpoint='https://api.neshan.org/v4/direction'; else endpoint='https://api.neshan.org/v4/direction/no-traffic'; fi
+              curl --fail --silent --show-error --retry 2 --max-time 35 \
+                -H "Api-Key: ${NESHAN_API_KEY}" \
+                "${endpoint}?type=car&origin=${origin}&destination=${destination}&alternative=false&avoidTrafficZone=false&avoidOddEvenZone=false" \
+                > "/tmp/neshan-${city}-${mode}.json"
+              jq -e '.routes | type == "array" and length > 0' "/tmp/neshan-${city}-${mode}.json" >/dev/null
+              jq -e '[.routes[0].legs[].duration.value] | length > 0 and all(. > 0)' "/tmp/neshan-${city}-${mode}.json" >/dev/null
+              jq -e '.routes[0].overview_polyline.points | type == "string" and length > 0' "/tmp/neshan-${city}-${mode}.json" >/dev/null
+            done
+          done
+          echo "Authenticated Neshan returned valid live and baseline routes for Tehran and Karaj."
 
-      - name: Reject Compile-only Placeholder Fonts From Final Release
+      - name: Validate Authoritative IRANSans FaNum Sources
         shell: bash
         run: |
           set -euo pipefail
-          if grep -Fq "fc-match 'DejaVu Sans'" .github/workflows/build-run39.yml; then
-            echo "::error::Development workflow still injects DejaVu Sans as compile-only font resources. This candidate must not be promoted to Final Release."
-            exit 1
-          fi
-          if grep -Fq 'Supply temporary compile-only font resources' .github/workflows/build-run39.yml; then
-            echo "::error::Compile-only font substitution is still present in the development workflow."
-            exit 1
-          fi
+          echo '1df818a6b400da053448a007729d548436e76bdee48d52647bc2ed69a6ff62f9  ci/fonts/iransans_fanum_regular.ttf' | sha256sum --check
+          echo 'd8ab70132d0e59cd873a1fa212a6ae8b2867495a013fa55484615c360ce74cc0  ci/fonts/iransans_fanum_medium.ttf' | sha256sum --check
+          echo '96d8e88e864c66c15447f27429711f6c3e5d14c5d9d633edd2bf6c22f870dd19  ci/fonts/iransans_fanum_bold.ttf' | sha256sum --check
+          ! grep -Fq "fc-match 'DejaVu Sans'" .github/workflows/build-run39.yml
+          ! grep -Fq 'Supply temporary compile-only font resources' .github/workflows/build-run39.yml
 
       - name: Validate Strict QA Evidence
         shell: bash

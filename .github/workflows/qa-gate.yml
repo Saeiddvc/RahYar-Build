@@ -102,19 +102,32 @@ jobs:
             exit 1
           fi
 
-      - name: Validate live HERE Traffic credential
+      - name: Validate live Neshan Traffic credential
         env:
-          HERE_TRAFFIC_API_KEY: ${{ secrets.HERE_TRAFFIC_API_KEY || vars.HERE_TRAFFIC_API_KEY || secrets.HERE_API_KEY || vars.HERE_API_KEY }}
+          NESHAN_API_KEY: ${{ secrets.NESHAN_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "$HERE_TRAFFIC_API_KEY" ]; then
-            echo "QA LIVE FAIL: HERE_TRAFFIC_API_KEY is not configured."
+          if [ -z "$NESHAN_API_KEY" ]; then
+            echo "QA LIVE FAIL: NESHAN_API_KEY is not configured."
             exit 1
           fi
-          curl --fail --silent --show-error --max-time 35             "https://data.traffic.hereapi.com/v7/flow?in=bbox:50.94,35.81,51.01,35.84&locationReferencing=shape&apiKey=$HERE_TRAFFIC_API_KEY"             > /tmp/here-traffic.json
-          jq -e '.results | type == "array"' /tmp/here-traffic.json >/dev/null
-          echo "PASSED: provider_manager.here_traffic_active — authenticated HERE Traffic returned a valid response."
+          for city in tehran karaj; do
+            case "$city" in
+              tehran) origin='35.7210,51.4100'; destination='35.7448,51.3752' ;;
+              karaj) origin='35.8327,50.9916'; destination='35.8069,50.9581' ;;
+            esac
+            for mode in live baseline; do
+              if [ "$mode" = live ]; then endpoint='https://api.neshan.org/v4/direction'; else endpoint='https://api.neshan.org/v4/direction/no-traffic'; fi
+              curl --fail --silent --show-error --retry 2 --max-time 35 \
+                -H "Api-Key: ${NESHAN_API_KEY}" \
+                "${endpoint}?type=car&origin=${origin}&destination=${destination}&alternative=false&avoidTrafficZone=false&avoidOddEvenZone=false" \
+                > "/tmp/neshan-${city}-${mode}.json"
+              jq -e '.routes | type == "array" and length > 0' "/tmp/neshan-${city}-${mode}.json" >/dev/null
+              jq -e '[.routes[0].legs[].duration.value] | length > 0 and all(. > 0)' "/tmp/neshan-${city}-${mode}.json" >/dev/null
+            done
+          done
+          echo "PASSED: provider_manager.neshan_traffic_active — authenticated Neshan live and baseline routing succeeded for Tehran and Karaj."
 
       - name: Final Result
         run: echo "RahYar QA Evidence Gate PASSED — Build Approved."
