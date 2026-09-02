@@ -70,18 +70,15 @@ jobs:
           done
           echo "Authenticated Neshan returned valid live and baseline routes for Tehran and Karaj."
 
-      - name: Reject Compile-only Placeholder Fonts From Final Release
+      - name: Validate Authoritative IRANSans FaNum Sources
         shell: bash
         run: |
           set -euo pipefail
-          if grep -Fq "fc-match 'DejaVu Sans'" .github/workflows/build-run39.yml; then
-            echo "::error::Development workflow still injects DejaVu Sans as compile-only font resources. This candidate must not be promoted to Final Release."
-            exit 1
-          fi
-          if grep -Fq 'Supply temporary compile-only font resources' .github/workflows/build-run39.yml; then
-            echo "::error::Compile-only font substitution is still present in the development workflow."
-            exit 1
-          fi
+          echo '1df818a6b400da053448a007729d548436e76bdee48d52647bc2ed69a6ff62f9  ci/fonts/iransans_fanum_regular.ttf' | sha256sum --check
+          echo 'd8ab70132d0e59cd873a1fa212a6ae8b2867495a013fa55484615c360ce74cc0  ci/fonts/iransans_fanum_medium.ttf' | sha256sum --check
+          echo '96d8e88e864c66c15447f27429711f6c3e5d14c5d9d633edd2bf6c22f870dd19  ci/fonts/iransans_fanum_bold.ttf' | sha256sum --check
+          ! grep -Fq "fc-match 'DejaVu Sans'" .github/workflows/build-run39.yml
+          ! grep -Fq 'Supply temporary compile-only font resources' .github/workflows/build-run39.yml
 
       - name: Validate Strict QA Evidence
         shell: bash

@@ -3,7 +3,7 @@ name: RahYar Development Pipeline
 on:
   workflow_dispatch:
   push:
-    branches: [ main, codex/run57-neshan-traffic ]
+    branches: [ main ]
     paths:
       - '.github/workflows/build-run39.yml'
       - 'ci/**'
@@ -668,15 +668,17 @@ jobs:
           jq -e '[.elements[].tags.maxspeed? | select(. != null and . != "")] | length > 0' /tmp/overpass-speed.json >/dev/null
           echo "Overpass speed-limit provider returned live maxspeed data."
 
-      - name: Supply temporary compile-only font resources
+      - name: Install approved IRANSans FaNum resources
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p project/app/src/main/res/font
-          FONT="$(fc-match 'DejaVu Sans' -f '%{file}\n' | head -n1)"
-          cp "$FONT" project/app/src/main/res/font/iransans_fanum_regular.ttf
-          cp "$FONT" project/app/src/main/res/font/iransans_fanum_medium.ttf
-          cp "$FONT" project/app/src/main/res/font/iransans_fanum_bold.ttf
+          echo '1df818a6b400da053448a007729d548436e76bdee48d52647bc2ed69a6ff62f9  ci/fonts/iransans_fanum_regular.ttf' | sha256sum --check
+          echo 'd8ab70132d0e59cd873a1fa212a6ae8b2867495a013fa55484615c360ce74cc0  ci/fonts/iransans_fanum_medium.ttf' | sha256sum --check
+          echo '96d8e88e864c66c15447f27429711f6c3e5d14c5d9d633edd2bf6c22f870dd19  ci/fonts/iransans_fanum_bold.ttf' | sha256sum --check
+          install -m 0644 ci/fonts/iransans_fanum_regular.ttf project/app/src/main/res/font/iransans_fanum_regular.ttf
+          install -m 0644 ci/fonts/iransans_fanum_medium.ttf project/app/src/main/res/font/iransans_fanum_medium.ttf
+          install -m 0644 ci/fonts/iransans_fanum_bold.ttf project/app/src/main/res/font/iransans_fanum_bold.ttf
 
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17' }
@@ -690,6 +692,10 @@ jobs:
           ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
           NESHAN_API_KEY: ${{ secrets.NESHAN_API_KEY }}
         run: gradle testDebugUnitTest assembleDebug --stacktrace
+
+      - name: Verify release-grade APK contents
+        shell: bash
+        run: python3 ci/verify_run57_apk.py project/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload Run57 APK candidate
         uses: actions/upload-artifact@v4
