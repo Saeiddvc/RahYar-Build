@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "69 of 70 blocking items are currently release-verified. The remaining traffic blocker is provider_manager.neshan_traffic_active until authenticated GitHub Actions validates live and no-traffic routes for both Tehran and Karaj.",
-  "timestamp": "2026-09-01T01:04:00+03:30"
+  "pass": true,
+  "details": "All 70 blocking QA items are release-verified. The final traffic blocker closed in GitHub Actions run 33558012348 (attempt 3): authenticated Neshan live-traffic and no-traffic routes for Tehran and Karaj passed response, duration, and geometry validation.",
+  "timestamp": "2026-09-02T05:36:41Z"
 }
