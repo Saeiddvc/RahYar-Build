@@ -1,5 +1,5 @@
 {
-  "pass": false,
-  "details": "Neshan is wired as the primary live traffic provider. Release remains blocked until authenticated GitHub Actions calls both live and no-traffic routing endpoints for Tehran and Karaj and validates non-empty routes, positive durations, and route geometry.",
-  "timestamp": "2026-09-01T00:00:00Z"
+  "pass": true,
+  "details": "GitHub Actions run 33558012348 (attempt 3) authenticated with NESHAN_API_KEY and successfully called Neshan v4 live-traffic and no-traffic routing endpoints for both Tehran and Karaj. All four responses contained non-empty routes, positive leg durations, and overview geometry. Compile and 102 unit tests also passed; APK candidate artifact ID 9833190562 was uploaded.",
+  "timestamp": "2026-09-02T05:36:41Z"
 }
