@@ -1,0 +1,1073 @@
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -16,8 +16,8 @@
+         applicationId = "ir.rahyar.app"
+         minSdk = 24
+         targetSdk = 34
+-        versionCode = 35
+-        versionName = "1.7.3-run57-final-font-structure"
++        versionCode = 36
++        versionName = "1.7.4-run58-field-fixes"
+         buildConfigField("String", "ORS_API_KEY", "\"${orsApiKey.escapeBuildConfig()}\"")
+         buildConfigField("String", "NESHAN_API_KEY", "\"${neshanApiKey.escapeBuildConfig()}\"")
+     }
+--- a/app/src/main/java/ir/rahyar/app/MainActivity.kt
++++ b/app/src/main/java/ir/rahyar/app/MainActivity.kt
+@@ -28,11 +28,6 @@
+ 
+         setContent {
+             val themeValue by settingsRepository.themeModeFlow.collectAsStateWithLifecycle(initialValue = "system")
+-            val languageValue by settingsRepository.languageFlow.collectAsStateWithLifecycle(initialValue = "fa")
+-            val layoutDirection = when (languageValue) {
+-                "fa", "ar", "ku" -> LayoutDirection.Rtl
+-                else -> LayoutDirection.Ltr
+-            }
+             val themeMode = when (themeValue) {
+                 "light" -> RahyarThemeMode.LIGHT
+                 "dark" -> RahyarThemeMode.DARK
+@@ -41,7 +36,7 @@
+ 
+             RahyarTheme(
+                 themeMode = themeMode,
+-                layoutDirection = layoutDirection
++                layoutDirection = LayoutDirection.Rtl
+             ) {
+                 RahyarNavHost(
+                     locationProvider = locationProvider,
+--- a/app/src/main/java/ir/rahyar/app/core/map/RahyarMapView.kt
++++ b/app/src/main/java/ir/rahyar/app/core/map/RahyarMapView.kt
+@@ -2,7 +2,9 @@
+ 
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.DisposableEffect
++import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberUpdatedState
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.platform.LocalContext
+ import androidx.compose.ui.viewinterop.AndroidView
+@@ -23,30 +25,68 @@
+ ) {
+     val context = LocalContext.current
+     val lifecycleOwner = LocalLifecycleOwner.current
+-    val mapView = remember {
++    val latestOnMapReady by rememberUpdatedState(onMapReady)
++    val mapView = remember(context, styleUrl) {
+         MapView(context).apply {
+             onCreate(null)
+-            getMapAsync { map ->
+-                map.setStyle(Style.Builder().fromUri(styleUrl)) {
+-                    onMapReady(map)
+-                }
+-            }
+         }
+     }
+ 
+-    DisposableEffect(lifecycleOwner, mapView) {
++    DisposableEffect(lifecycleOwner, mapView, styleUrl) {
++        var started = false
++        var resumed = false
++
++        fun startIfNeeded() {
++            if (!started) {
++                mapView.onStart()
++                started = true
++            }
++        }
++
++        fun resumeIfNeeded() {
++            startIfNeeded()
++            if (!resumed) {
++                mapView.onResume()
++                resumed = true
++            }
++        }
++
++        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
++            resumeIfNeeded()
++        } else if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
++            startIfNeeded()
++        }
++
++        mapView.getMapAsync { map ->
++            map.setStyle(Style.Builder().fromUri(styleUrl)) {
++                latestOnMapReady(map)
++            }
++        }
++
+         val observer = LifecycleEventObserver { _, event ->
+             when (event) {
+-                Lifecycle.Event.ON_START -> mapView.onStart()
+-                Lifecycle.Event.ON_RESUME -> mapView.onResume()
+-                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
+-                Lifecycle.Event.ON_STOP -> mapView.onStop()
++                Lifecycle.Event.ON_START -> startIfNeeded()
++                Lifecycle.Event.ON_RESUME -> resumeIfNeeded()
++                Lifecycle.Event.ON_PAUSE -> if (resumed) {
++                    mapView.onPause()
++                    resumed = false
++                }
++                Lifecycle.Event.ON_STOP -> if (started) {
++                    if (resumed) {
++                        mapView.onPause()
++                        resumed = false
++                    }
++                    mapView.onStop()
++                    started = false
++                }
+                 else -> Unit
+             }
+         }
+         lifecycleOwner.lifecycle.addObserver(observer)
+         onDispose {
+             lifecycleOwner.lifecycle.removeObserver(observer)
++            if (resumed) mapView.onPause()
++            if (started) mapView.onStop()
+             mapView.onDestroy()
+         }
+     }
+--- a/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt
++++ b/app/src/main/java/ir/rahyar/app/navigation/NavigationSession.kt
+@@ -119,7 +119,7 @@
+         _state.update { current ->
+             val origin = current.origin ?: return@update current
+             val destination = current.destination ?: return@update current
+-            val stops = waypoints.mapIndexed { index, point ->
++            val stops = waypoints.distinct().take(8).mapIndexed { index, point ->
+                 ItineraryStop("legacy-${index}-${point.latitude}-${point.longitude}", point, index + 1, StopStatus.PENDING)
+             }
+             current.copy(itinerary = Itinerary(origin, stops, destination), selectedRoute = null)
+@@ -131,6 +131,12 @@
+             val origin = current.origin ?: return@update current
+             val destination = current.destination ?: return@update current
+             val itinerary = current.itinerary ?: Itinerary(origin, emptyList(), destination)
++            if (itinerary.stops.any { it.status == StopStatus.PENDING && (it.id == id || it.location == location) }) {
++                return@update current
++            }
++            if (itinerary.stops.count { it.status == StopStatus.PENDING } >= 8) {
++                return@update current
++            }
+             val nextOrder = (itinerary.stops.maxOfOrNull { it.order } ?: 0) + 1
+             current.copy(
+                 itinerary = itinerary.copy(stops = itinerary.stops + ItineraryStop(id, location, nextOrder, StopStatus.PENDING)),
+--- a/app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt
++++ b/app/src/main/java/ir/rahyar/app/navigation/RahyarNavHost.kt
+@@ -1,12 +1,21 @@
+ package ir.rahyar.app.navigation
+ 
+ import androidx.compose.foundation.layout.Box
+-import androidx.compose.ui.Alignment
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.padding
+ import androidx.compose.ui.Modifier
+-import androidx.compose.runtime.Composable
+-import androidx.compose.runtime.remember
++import androidx.compose.material3.BottomSheetScaffold
++import androidx.compose.material3.ExperimentalMaterial3Api
++import androidx.compose.material3.SheetValue
++import androidx.compose.material3.rememberBottomSheetScaffoldState
++import androidx.compose.material3.rememberStandardBottomSheetState
++import androidx.compose.runtime.*
++import androidx.compose.ui.unit.dp
+ import androidx.lifecycle.ViewModel
+ import androidx.lifecycle.ViewModelProvider
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import androidx.lifecycle.viewmodel.compose.viewModel
+ import androidx.navigation.compose.NavHost
+ import androidx.navigation.compose.composable
+@@ -28,6 +37,7 @@
+ import ir.rahyar.app.ui.search.DestinationSearchViewModel
+ import ir.rahyar.app.ui.settings.SettingsScreen
+ 
++@OptIn(ExperimentalMaterial3Api::class)
+ @Composable
+ fun RahyarNavHost(
+     locationProvider: LocationProvider,
+@@ -63,29 +73,58 @@
+         }
+     }
+     val routePreviewViewModel: RoutePreviewViewModel = viewModel(factory = routePreviewFactory)
++    var homeSearchRequestToken by remember { mutableIntStateOf(0) }
++    val sessionState by navigationSession.state.collectAsStateWithLifecycle()
++    val homeSheetState = rememberStandardBottomSheetState(
++        initialValue = SheetValue.PartiallyExpanded,
++        skipHiddenState = true
++    )
++    val homeScaffoldState = rememberBottomSheetScaffoldState(homeSheetState)
++    val showHomeSheet = sessionState.destination == null && sessionState.selectedRoute == null
+ 
+     NavHost(navController = navController, startDestination = Destinations.HOME) {
+         composable(Destinations.HOME) {
+-            Box {
+-                RahyarMapScreen(
+-                    locationProvider = locationProvider,
+-                    navigationSession = navigationSession,
+-                    routePreviewViewModel = routePreviewViewModel,
+-                    settingsRepository = settingsRepository,
+-                    providerManager = providerManager,
+-                    searchViewModel = destinationSearchViewModel,
+-                    onSettingsRequested = { navController.navigate(Destinations.SETTINGS) },
+-                    onStartNavigation = { navController.navigate(Destinations.ACTIVE_NAVIGATION) }
+-                )
+-            HomeDashboardOverlay(
+-                navController = navController,
+-                locationProvider = locationProvider,
+-                navigationSession = navigationSession,
+-                destinationSearchRepository = destinationSearchRepository,
+-                weatherRepository = weatherRepository,
+-                trafficRepository = trafficRepository,
+-                modifier = Modifier.align(Alignment.BottomCenter)
+-            )
++            BottomSheetScaffold(
++                scaffoldState = homeScaffoldState,
++                sheetPeekHeight = if (showHomeSheet) 104.dp else 0.dp,
++                sheetContent = {
++                    if (showHomeSheet) {
++                        HomeDashboardOverlay(
++                            locationProvider = locationProvider,
++                            navigationSession = navigationSession,
++                            destinationSearchRepository = destinationSearchRepository,
++                            weatherRepository = weatherRepository,
++                            trafficRepository = trafficRepository,
++                            onSearchRequested = { homeSearchRequestToken++ },
++                            modifier = Modifier
++                        )
++                    } else {
++                        Spacer(Modifier.height(1.dp))
++                    }
++                }
++            ) { contentPadding ->
++                Box(
++                    Modifier
++                        .fillMaxSize()
++                        .padding(contentPadding)
++                ) {
++                    RahyarMapScreen(
++                        locationProvider = locationProvider,
++                        navigationSession = navigationSession,
++                        routePreviewViewModel = routePreviewViewModel,
++                        settingsRepository = settingsRepository,
++                        providerManager = providerManager,
++                        searchViewModel = destinationSearchViewModel,
++                        searchRequestToken = homeSearchRequestToken,
++                        onSettingsRequested = { navController.navigate(Destinations.SETTINGS) },
++                        onStartNavigation = { route ->
++                            navigationSession.beginNavigation(route)
++                            navController.navigate(Destinations.ACTIVE_NAVIGATION) {
++                                launchSingleTop = true
++                            }
++                        }
++                    )
++                }
+             }
+         }
+         composable(Destinations.DESTINATION_SEARCH) {
+@@ -136,6 +175,7 @@
+             SettingsScreen(
+                 settingsRepository = settingsRepository,
+                 navigationSession = navigationSession,
++                providerManager = providerManager,
+                 onBack = { navController.popBackStack() }
+             )
+         }
+--- a/app/src/main/java/ir/rahyar/app/ui/components/NavigationControls.kt
++++ b/app/src/main/java/ir/rahyar/app/ui/components/NavigationControls.kt
+@@ -50,29 +50,22 @@
+             ControlButton("خدمات", true, onServices) {
+                 Icon(Icons.Default.LocalGasStation, "خدمات میان‌راه")
+             }
+-            ControlButton("مسیرها", alternativesEnabled, onAlternatives) {
+-                Icon(
+-                    Icons.Default.Route,
+-                    if (alternativesEnabled) "مسیرهای جایگزین" else "مسیر جایگزین در دسترس نیست"
+-                )
++            if (alternativesEnabled) {
++                ControlButton("مسیرها", true, onAlternatives) {
++                    Icon(Icons.Default.Route, "مسیرهای جایگزین")
++                }
+             }
+-            ControlButton(
+-                label = when {
+-                    !voiceAvailable -> "صدا"
+-                    voiceEnabled -> "صدا روشن"
+-                    else -> "صدا خاموش"
+-                },
+-                enabled = voiceAvailable,
+-                onClick = { if (voiceAvailable) onVoiceToggle() }
+-            ) {
+-                Icon(
+-                    if (voiceAvailable && voiceEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
+-                    when {
+-                        !voiceAvailable -> "راهنمای صوتی در این نسخه فعال نیست"
+-                        voiceEnabled -> "قطع راهنمای صوتی"
+-                        else -> "فعال کردن راهنمای صوتی"
+-                    }
+-                )
++            if (voiceAvailable) {
++                ControlButton(
++                    label = if (voiceEnabled) "صدا روشن" else "صدا خاموش",
++                    enabled = true,
++                    onClick = onVoiceToggle
++                ) {
++                    Icon(
++                        if (voiceEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
++                        if (voiceEnabled) "قطع راهنمای صوتی" else "فعال کردن راهنمای صوتی"
++                    )
++                }
+             }
+         }
+     }
+--- a/app/src/main/java/ir/rahyar/app/ui/components/PreNavigationComponents.kt
++++ b/app/src/main/java/ir/rahyar/app/ui/components/PreNavigationComponents.kt
+@@ -47,12 +47,10 @@
+             .padding(horizontal = 16.dp),
+         horizontalArrangement = Arrangement.spacedBy(8.dp)
+     ) {
+-        transportModes.forEach { mode ->
+-            val supported = providerManager.isRoutingSupported(mode)
++        transportModes.filter(providerManager::isRoutingSupported).forEach { mode ->
+             FilterChip(
+                 selected = mode == selected,
+-                enabled = supported,
+-                onClick = { if (supported && mode != selected) onSelect(mode) },
++                onClick = { if (mode != selected) onSelect(mode) },
+                 label = { Text(mode.labelFa(), maxLines = 1) }
+             )
+         }
+@@ -65,9 +63,10 @@
+     providerManager: ProviderManager
+ ) {
+     val scope = rememberCoroutineScope()
+-    val avoidTrafficZone by settingsRepository.avoidTrafficZoneFlow.collectAsStateWithLifecycle(initialValue = false)
+-    val avoidPollutionZone by settingsRepository.avoidPollutionZoneFlow.collectAsStateWithLifecycle(initialValue = false)
+-    val avoidTolls by settingsRepository.avoidTollsFlow.collectAsStateWithLifecycle(initialValue = false)
++    val voiceEnabled by settingsRepository.voiceGuidanceFlow.collectAsStateWithLifecycle(initialValue = true)
++    val activeModes = transportModes
++        .filter(providerManager::isRoutingSupported)
++        .joinToString("، ") { it.labelFa() }
+ 
+     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+         Text("تنظیمات قبل از شروع", style = MaterialTheme.typography.titleMedium)
+@@ -75,37 +74,8 @@
+ 
+         Surface(shape = MaterialTheme.shapes.large, tonalElevation = 1.dp) {
+             Column(Modifier.fillMaxWidth().padding(14.dp)) {
+-                Text("محدودیت‌های مسیر", style = MaterialTheme.typography.titleSmall)
+-
+-                PreferenceSwitch(
+-                    label = "پرهیز از محدوده طرح ترافیک",
+-                    checked = providerManager.hasTraffic() && avoidTrafficZone,
+-                    enabled = providerManager.hasTraffic(),
+-                    unavailableText = "داده معتبر محدوده طرح ترافیک در دسترس نیست"
+-                ) { scope.launch { settingsRepository.setAvoidTrafficZone(it) } }
+-
+-                PreferenceSwitch(
+-                    label = "پرهیز از محدوده آلودگی",
+-                    checked = providerManager.hasPollution() && avoidPollutionZone,
+-                    enabled = providerManager.hasPollution(),
+-                    unavailableText = "داده معتبر محدوده آلودگی در دسترس نیست"
+-                ) { scope.launch { settingsRepository.setAvoidPollutionZone(it) } }
+-
+-                PreferenceSwitch(
+-                    label = "پرهیز از عوارضی",
+-                    checked = providerManager.hasToll() && avoidTolls,
+-                    enabled = providerManager.hasToll(),
+-                    unavailableText = "داده معتبر عوارض در دسترس نیست"
+-                ) { scope.launch { settingsRepository.setAvoidTolls(it) } }
+-
+-                if (!providerManager.hasTraffic() || !providerManager.hasPollution() || !providerManager.hasToll()) {
+-                    Spacer(Modifier.height(6.dp))
+-                    Text(
+-                        "گزینه‌های بدون Provider معتبر غیرفعال می‌مانند.",
+-                        style = MaterialTheme.typography.bodySmall,
+-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+-                    )
+-                }
++                Text("حالت‌های مسیریابی فعال", style = MaterialTheme.typography.titleSmall)
++                Text(activeModes, style = MaterialTheme.typography.bodyMedium)
+             }
+         }
+ 
+@@ -113,40 +83,16 @@
+         Surface(shape = MaterialTheme.shapes.large, tonalElevation = 1.dp) {
+             Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                 Text("راهنمای صوتی", style = MaterialTheme.typography.titleSmall)
+-                Text(
+-                    "راهنمای صوتی در این نسخه فعال نیست",
+-                    style = MaterialTheme.typography.bodyMedium,
+-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+-                )
+-                Switch(
+-                    checked = false,
+-                    enabled = false,
+-                    onCheckedChange = null
+-                )
++                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
++                    Text("اعلان‌های صوتی مسیر", modifier = Modifier.weight(1f))
++                    Switch(
++                        checked = voiceEnabled,
++                        onCheckedChange = { enabled ->
++                            scope.launch { settingsRepository.setVoiceGuidance(enabled) }
++                        }
++                    )
++                }
+             }
+         }
+     }
+ }
+-
+-@Composable
+-private fun PreferenceSwitch(
+-    label: String,
+-    checked: Boolean,
+-    enabled: Boolean,
+-    unavailableText: String?,
+-    onCheckedChange: (Boolean) -> Unit
+-) {
+-    Column(Modifier.fillMaxWidth()) {
+-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+-            Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+-            Switch(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange)
+-        }
+-        if (!enabled && unavailableText != null) {
+-            Text(
+-                unavailableText,
+-                style = MaterialTheme.typography.labelSmall,
+-                color = MaterialTheme.colorScheme.onSurfaceVariant
+-            )
+-        }
+-    }
+-}
+--- a/app/src/main/java/ir/rahyar/app/ui/navigation/RoutePreviewViewModel.kt
++++ b/app/src/main/java/ir/rahyar/app/ui/navigation/RoutePreviewViewModel.kt
+@@ -73,9 +73,9 @@
+         val requestedDestination = destination
+         val requestedMode = mode
+         val requestedWaypoints = waypoints.toList()
++        _uiState.value = RoutePreviewUiState.Loading
+ 
+         calculationJob = viewModelScope.launch {
+-            _uiState.value = RoutePreviewUiState.Loading
+             try {
+                 val rawRoutes = getRoutesUseCase(
+                     origin = requestedOrigin,
+--- a/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
++++ b/app/src/main/java/ir/rahyar/app/ui/screens/ActiveNavigationScreen.kt
+@@ -57,6 +57,7 @@
+ import ir.rahyar.app.domain.models.TripMediaType
+ import ir.rahyar.app.domain.repository.TrafficRepository
+ import ir.rahyar.app.ui.components.TripStoryMotionView
++import ir.rahyar.app.navigation.Destinations
+ import ir.rahyar.app.navigation.NavigationSession
+ import ir.rahyar.app.ui.components.NavigationControls
+ import ir.rahyar.app.ui.components.NavigationHud
+@@ -103,21 +104,26 @@
+     val destination = session.destination
+ 
+     if (route == null || destination == null) {
++        LaunchedEffect(Unit) {
++            navController.popBackStack(route = Destinations.HOME, inclusive = false)
++        }
+         Surface(
+             modifier = Modifier.fillMaxSize(),
+             color = MaterialTheme.colorScheme.background,
+             contentColor = MaterialTheme.colorScheme.onBackground
+         ) {
+-            Column(Modifier.fillMaxSize().padding(24.dp)) {
++            Column(
++                Modifier.fillMaxSize().padding(24.dp),
++                verticalArrangement = Arrangement.Center,
++                horizontalAlignment = Alignment.CenterHorizontally
++            ) {
++                CircularProgressIndicator()
++                Spacer(Modifier.height(16.dp))
+                 Text(
+-                    "مسیر فعال در دسترس نیست",
+-                    style = MaterialTheme.typography.titleLarge,
++                    "در حال بازگشت به نقشه…",
++                    style = MaterialTheme.typography.titleMedium,
+                     color = MaterialTheme.colorScheme.onBackground
+                 )
+-                Spacer(Modifier.height(12.dp))
+-                Button(onClick = { navController.popBackStack() }) {
+-                    Text("بازگشت")
+-                }
+             }
+         }
+         return
+@@ -677,8 +683,10 @@
+             Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                 Text("تنظیمات سریع مسیریابی", style = MaterialTheme.typography.titleLarge)
+                 Spacer(Modifier.height(10.dp))
+-                QuickToggle("راهنمای صوتی", voiceAvailable && voiceEnabled, voiceAvailable) { enabled ->
+-                    scope.launch { settingsRepository.setVoiceGuidance(enabled) }
++                if (voiceAvailable) {
++                    QuickToggle("راهنمای صوتی", voiceEnabled) { enabled ->
++                        scope.launch { settingsRepository.setVoiceGuidance(enabled) }
++                    }
+                 }
+                 QuickToggle("هشدارهای صوتی", quickSettings.voiceAlertsEnabled) { value -> navigationSession.updateQuickSettings { it.copy(voiceAlertsEnabled = value) } }
+                 Text("نمای نقشه", style = MaterialTheme.typography.titleMedium)
+@@ -687,12 +695,6 @@
+                         FilterChip(selected = quickSettings.mapViewMode.name == key, onClick = { navigationSession.updateQuickSettings { it.copy(mapViewMode = MapViewMode.valueOf(key)) } }, label = { Text(label) })
+                     }
+                 }
+-                QuickToggle("نمایش ترافیک", quickSettings.showTraffic) { value -> navigationSession.updateQuickSettings { it.copy(showTraffic = value) } }
+-                QuickToggle("پرهیز از محدوده پرترافیک", quickSettings.avoidTrafficZone) { value -> scope.launch { settingsRepository.setAvoidTrafficZone(value) }; navigationSession.updateQuickSettings { it.copy(avoidTrafficZone = value) } }
+-                QuickToggle("پرهیز از محدوده آلودگی", quickSettings.avoidPollutionZone) { value -> scope.launch { settingsRepository.setAvoidPollutionZone(value) }; navigationSession.updateQuickSettings { it.copy(avoidPollutionZone = value) } }
+-                QuickToggle("پرهیز از عوارضی", quickSettings.avoidTollRoads) { value -> scope.launch { settingsRepository.setAvoidTolls(value) }; navigationSession.updateQuickSettings { it.copy(avoidTollRoads = value) } }
+-                QuickToggle("بازمسیر‌یابی در ترافیک سنگین", quickSettings.rerouteOnHeavyTraffic) { value -> navigationSession.updateQuickSettings { it.copy(rerouteOnHeavyTraffic = value) } }
+-                QuickToggle("بازمسیر‌یابی در آب‌وهوای شدید", quickSettings.rerouteOnSevereWeather) { value -> navigationSession.updateQuickSettings { it.copy(rerouteOnSevereWeather = value) } }
+                 QuickToggle("هشدار محدودیت سرعت", quickSettings.speedLimitAlertsEnabled) { value -> navigationSession.updateQuickSettings { it.copy(speedLimitAlertsEnabled = value) } }
+                 Button(
+                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+--- a/app/src/main/java/ir/rahyar/app/ui/screens/HomeDashboardOverlay.kt
++++ b/app/src/main/java/ir/rahyar/app/ui/screens/HomeDashboardOverlay.kt
+@@ -2,8 +2,6 @@
+ 
+ import android.Manifest
+ import android.content.pm.PackageManager
+-import androidx.activity.compose.rememberLauncherForActivityResult
+-import androidx.activity.result.contract.ActivityResultContracts
+ import androidx.compose.foundation.clickable
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Column
+@@ -27,15 +25,7 @@
+ import androidx.compose.material.icons.filled.Restaurant
+ import androidx.compose.material.icons.filled.Search
+ import androidx.compose.material.icons.filled.Work
+-import androidx.compose.material3.Button
+-import androidx.compose.material3.ExperimentalMaterial3Api
+-import androidx.compose.material3.Icon
+-import androidx.compose.material3.LinearProgressIndicator
+-import androidx.compose.material3.MaterialTheme
+-import androidx.compose.material3.ModalBottomSheet
+-import androidx.compose.material3.OutlinedButton
+-import androidx.compose.material3.Surface
+-import androidx.compose.material3.Text
++import androidx.compose.material3.*
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.getValue
+@@ -48,7 +38,6 @@
+ import androidx.compose.ui.unit.dp
+ import androidx.core.content.ContextCompat
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+-import androidx.navigation.NavHostController
+ import ir.rahyar.app.core.home.HomeServiceShortcut
+ import ir.rahyar.app.core.home.filterHomeServiceResults
+ import ir.rahyar.app.core.home.requiredHomeServiceShortcuts
+@@ -67,7 +56,6 @@
+ import ir.rahyar.app.domain.repository.DestinationSearchRepository
+ import ir.rahyar.app.domain.repository.TrafficRepository
+ import ir.rahyar.app.domain.repository.WeatherRepository
+-import ir.rahyar.app.navigation.Destinations
+ import ir.rahyar.app.navigation.NavigationSession
+ import kotlinx.coroutines.launch
+ import java.time.LocalDateTime
+@@ -75,12 +63,12 @@
+ @OptIn(ExperimentalMaterial3Api::class)
+ @Composable
+ fun HomeDashboardOverlay(
+-    navController: NavHostController,
+     locationProvider: LocationProvider,
+     navigationSession: NavigationSession,
+     destinationSearchRepository: DestinationSearchRepository,
+     weatherRepository: WeatherRepository,
+     trafficRepository: TrafficRepository,
++    onSearchRequested: () -> Unit,
+     modifier: Modifier = Modifier
+ ) {
+     val session by navigationSession.state.collectAsStateWithLifecycle()
+@@ -106,19 +94,10 @@
+         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+ 
+-    var permissionGranted by remember { mutableStateOf(hasPermission()) }
+-
+-    val launcher = rememberLauncherForActivityResult(
+-        ActivityResultContracts.RequestMultiplePermissions()
+-    ) { result ->
+-        permissionGranted =
+-            result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+-                result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+-    }
+-
+     suspend fun refreshOrigin(): LatLng? {
+-        if (!permissionGranted) return currentLocation
+-        val loc = runCatching { locationProvider.getLastLocation() }.getOrNull() ?: return currentLocation
++        val existing = navigationSession.state.value.origin ?: currentLocation
++        if (!hasPermission()) return existing
++        val loc = runCatching { locationProvider.getLastLocation() }.getOrNull() ?: return existing
+         val point = LatLng(loc.latitude, loc.longitude)
+         currentLocation = point
+         navigationSession.setOrigin(point)
+@@ -131,9 +110,6 @@
+             destinationSearchRepository.saveRecent(result)
+             recentDestinations = destinationSearchRepository.recentDestinations()
+             navigationSession.setDestinationCandidate(result)
+-            navController.navigate(Destinations.CONFIRM_DESTINATION) {
+-                launchSingleTop = true
+-            }
+         }
+     }
+ 
+@@ -163,14 +139,6 @@
+     }
+ 
+     LaunchedEffect(Unit) {
+-        if (!permissionGranted) {
+-            launcher.launch(
+-                arrayOf(
+-                    Manifest.permission.ACCESS_FINE_LOCATION,
+-                    Manifest.permission.ACCESS_COARSE_LOCATION
+-                )
+-            )
+-        }
+         recentDestinations = runCatching {
+             destinationSearchRepository.recentDestinations()
+         }.getOrDefault(emptyList())
+@@ -178,6 +146,10 @@
+         refreshOrigin()
+     }
+ 
++    LaunchedEffect(session.origin) {
++        session.origin?.let { currentLocation = it }
++    }
++
+     LaunchedEffect(currentLocation) {
+         val point = currentLocation ?: return@LaunchedEffect
+         val route = localStatusQueryRoute(point)
+@@ -192,21 +164,24 @@
+     Surface(
+         modifier = modifier
+             .fillMaxWidth()
+-            .heightIn(max = 430.dp)
+-            .padding(horizontal = 12.dp, vertical = 10.dp),
++            .heightIn(max = 570.dp)
++            .padding(horizontal = 12.dp, vertical = 8.dp),
+         shape = RoundedCornerShape(22.dp),
+-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
++        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+         tonalElevation = 4.dp
+     ) {
+         Column(
+             Modifier
+                 .fillMaxWidth()
+                 .verticalScroll(rememberScrollState())
++                .navigationBarsPadding()
+                 .padding(14.dp)
+         ) {
+             Button(
+-                modifier = Modifier.fillMaxWidth(),
+-                onClick = { navController.navigate(Destinations.DESTINATION_SEARCH) }
++                modifier = Modifier
++                    .fillMaxWidth()
++                    .height(52.dp),
++                onClick = onSearchRequested
+             ) {
+                 Icon(Icons.Default.Search, contentDescription = null)
+                 Spacer(Modifier.padding(4.dp))
+--- a/app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt
++++ b/app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt
+@@ -11,7 +11,7 @@
+ import androidx.compose.foundation.layout.*
+ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.material.icons.Icons
+-import androidx.compose.material.icons.filled.Search
++import androidx.compose.material.icons.filled.MyLocation
+ import androidx.compose.material.icons.filled.Settings
+ import androidx.compose.material3.*
+ import androidx.compose.runtime.*
+@@ -72,6 +72,7 @@
+     settingsRepository: SettingsRepository,
+     providerManager: ProviderManager,
+     searchViewModel: DestinationSearchViewModel,
++    searchRequestToken: Int,
+     onSettingsRequested: () -> Unit,
+     onStartNavigation: (Route) -> Unit
+ ) {
+@@ -95,13 +96,15 @@
+     var searchPurpose by remember { mutableStateOf(SearchPurpose.DESTINATION) }
+     var precisePickMode by remember { mutableStateOf(false) }
+     var overviewRequestToken by remember { mutableIntStateOf(0) }
++    var recenterRequestToken by remember { mutableIntStateOf(0) }
+ 
+     val success = routeState as? RoutePreviewUiState.Success
+     val routes = selectRoutePreviewRoutes(success?.routes?.map { it.route }.orEmpty())
+     val selectedRoute = success?.selectedRoute?.route
+         ?.takeIf(::isRenderableRoute)
+         ?: routes.firstOrNull()
+-    val blockingOverlayVisible = showSearchSheet || showConfirmSheet || precisePickMode
++    val blockingOverlayVisible = showSearchSheet || showConfirmSheet || showRouteSheet ||
++        showMoreSettings || precisePickMode
+     val stickyStartVisible = shouldShowStickyStart(selectedRoute, blockingOverlayVisible)
+     val previewCameraPadding = routePreviewCameraPadding(
+         routeSheetVisible = showRouteSheet,
+@@ -143,6 +146,22 @@
+         navigationSession.setOrigin(origin)
+     }
+ 
++    DisposableEffect(permissionGranted, locationProvider) {
++        if (permissionGranted) {
++            locationProvider.startLocationUpdates { location ->
++                val origin = LatLng(location.latitude, location.longitude)
++                currentLocation = origin
++                val current = navigationSession.state.value
++                if (current.selectedRoute == null) {
++                    navigationSession.setOrigin(origin)
++                }
++            }
++        }
++        onDispose {
++            if (permissionGranted) locationProvider.stopLocationUpdates()
++        }
++    }
++
+     LaunchedEffect(persistedMode) {
+         if (session.selectedRoute == null && persistedMode != session.transportMode) {
+             val safeMode = if (providerManager.isRoutingSupported(persistedMode)) {
+@@ -151,6 +170,9 @@
+                 TransportMode.CAR
+             }
+             navigationSession.setTransportMode(safeMode)
++            if (safeMode != persistedMode) {
++                settingsRepository.setTransportMode(safeMode)
++            }
+         }
+     }
+ 
+@@ -181,6 +203,26 @@
+         showConfirmSheet = true
+     }
+ 
++    LaunchedEffect(searchRequestToken) {
++        if (searchRequestToken <= 0) return@LaunchedEffect
++        searchPurpose = SearchPurpose.DESTINATION
++        showRouteSheet = false
++        showConfirmSheet = false
++        showMoreSettings = false
++        precisePickMode = false
++        showSearchSheet = true
++    }
++
++    LaunchedEffect(session.destinationCandidate?.id) {
++        val candidate = session.destinationCandidate ?: return@LaunchedEffect
++        previewDestination = candidate
++        showSearchSheet = false
++        showRouteSheet = false
++        showMoreSettings = false
++        precisePickMode = false
++        showConfirmSheet = true
++    }
++
+     Box(Modifier.fillMaxSize()) {
+         RahyarOverviewMap(
+             currentLocation = currentLocation,
+@@ -190,6 +232,7 @@
+             selectedRoute = selectedRoute,
+             waypoints = session.waypoints,
+             overviewRequestToken = overviewRequestToken,
++            recenterRequestToken = recenterRequestToken,
+             cameraPadding = previewCameraPadding,
+             onLongPressDestination = ::openDestinationCandidate,
+             onRouteSelected = { route ->
+@@ -227,6 +270,12 @@
+                         )
+                     }
+                     IconButton(
++                        onClick = { recenterRequestToken++ },
++                        modifier = Modifier.size(42.dp)
++                    ) {
++                        Icon(Icons.Default.MyLocation, contentDescription = "نمایش موقعیت من")
++                    }
++                    IconButton(
+                         onClick = onSettingsRequested,
+                         modifier = Modifier.size(42.dp)
+                     ) {
+@@ -235,39 +284,6 @@
+                 }
+             }
+ 
+-            Spacer(Modifier.height(4.dp))
+-
+-            Surface(
+-                modifier = Modifier
+-                    .fillMaxWidth()
+-                    .height(46.dp)
+-                    .clickable {
+-                        searchPurpose = SearchPurpose.DESTINATION
+-                        showRouteSheet = false
+-                        showConfirmSheet = false
+-                        showMoreSettings = false
+-                        precisePickMode = false
+-                        showSearchSheet = true
+-                    },
+-                shape = RoundedCornerShape(16.dp),
+-                tonalElevation = 3.dp,
+-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
+-            ) {
+-                Row(
+-                    Modifier
+-                        .fillMaxSize()
+-                        .padding(horizontal = 14.dp),
+-                    verticalAlignment = Alignment.CenterVertically
+-                ) {
+-                    Icon(Icons.Default.Search, contentDescription = null)
+-                    Spacer(Modifier.width(10.dp))
+-                    Text(
+-                        "کجا می‌خواهید بروید؟",
+-                        style = MaterialTheme.typography.bodyMedium,
+-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+-                    )
+-                }
+-            }
+         }
+ 
+         if (success != null && selectedRoute != null && stickyStartVisible) {
+@@ -394,18 +410,21 @@
+                             }
+ 
+                             SearchPurpose.WAYPOINT -> {
+-                                val destination = session.destination
+-                                val origin = session.origin
++                                val before = navigationSession.state.value
++                                val destination = before.destination
++                                val origin = before.origin
+                                 if (destination != null && origin != null) {
+-                                    val updated = (session.waypoints + result.location)
+-                                        .distinct()
+-                                        .take(8)
+-                                    navigationSession.setWaypoints(updated)
++                                    navigationSession.addStop(
++                                        location = result.location,
++                                        id = "search-${result.id}"
++                                    )
++                                    val refreshed = navigationSession.state.value
++                                    val updated = refreshed.waypoints.take(8)
+                                     showSearchSheet = false
+                                     routePreviewViewModel.calculateRoutes(
+                                         origin = origin,
+                                         destination = destination,
+-                                        mode = session.transportMode,
++                                        mode = refreshed.transportMode,
+                                         waypoints = updated
+                                     )
+                                     showRouteSheet = true
+@@ -460,12 +479,13 @@
+                             showConfirmSheet = false
+                             precisePickMode = false
+                             navigationSession.confirmDestination()
++                            val confirmed = navigationSession.state.value
+ 
+                             routePreviewViewModel.calculateRoutes(
+                                 origin = origin,
+-                                destination = candidate.location,
+-                                mode = session.transportMode,
+-                                waypoints = session.waypoints
++                                destination = confirmed.destination ?: candidate.location,
++                                mode = confirmed.transportMode,
++                                waypoints = confirmed.waypoints
+                             )
+                             showRouteSheet = true
+                         }
+@@ -542,6 +562,7 @@
+     selectedRoute: Route?,
+     waypoints: List<LatLng>,
+     overviewRequestToken: Int,
++    recenterRequestToken: Int,
+     cameraPadding: CameraPadding,
+     onLongPressDestination: (SearchResult) -> Unit,
+     onRouteSelected: (Route) -> Unit
+@@ -552,6 +573,8 @@
+     var destinationMarker by remember { mutableStateOf<Marker?>(null) }
+     var currentMarker by remember { mutableStateOf<Marker?>(null) }
+     var waypointMarkers by remember { mutableStateOf<List<Marker>>(emptyList()) }
++    var hasCenteredOnUser by remember { mutableStateOf(false) }
++    var handledRecenterToken by remember { mutableIntStateOf(-1) }
+ 
+     val latestRoutes by rememberUpdatedState(routes)
+     val latestLongPressDestination by rememberUpdatedState(onLongPressDestination)
+@@ -560,7 +583,7 @@
+     val routeIds = routes.take(3).joinToString("|") { it.id }
+     val cameraFitKey = routePreviewCameraFitKey(routes, overviewRequestToken)
+ 
+-    LaunchedEffect(mapRef, currentLocation) {
++    LaunchedEffect(mapRef, currentLocation, recenterRequestToken) {
+         val map = mapRef ?: return@LaunchedEffect
+         val location = currentLocation ?: return@LaunchedEffect
+         val point = MapLatLng(location.latitude, location.longitude)
+@@ -576,12 +599,18 @@
+ 
+             currentMarker = map.addMarker(markerOptions)
+ 
+-            if (routes.isEmpty() && destinationCandidate == null && destination == null) {
+-                map.animateCamera(CameraUpdateFactory.newLatLngZoom(point, 15.0))
+-            }
+         } else {
+             currentMarker?.position = point
+         }
++
++        val explicitRecenter = recenterRequestToken != handledRecenterToken
++        if ((explicitRecenter || !hasCenteredOnUser) &&
++            routes.isEmpty() && destinationCandidate == null && destination == null
++        ) {
++            map.animateCamera(CameraUpdateFactory.newLatLngZoom(point, 15.0), 450)
++            hasCenteredOnUser = true
++            handledRecenterToken = recenterRequestToken
++        }
+     }
+ 
+     LaunchedEffect(mapRef, destinationCandidate?.id, destination) {
+@@ -714,6 +743,12 @@
+ 
+     RahyarMapView(Modifier.fillMaxSize()) { map ->
+         map.uiSettings.setAllGesturesEnabled(true)
++        map.moveCamera(
++            CameraUpdateFactory.newLatLngZoom(
++                MapLatLng(35.7219, 51.3347),
++                10.8
++            )
++        )
+         mapRef = map
+ 
+         map.addOnMapLongClickListener { tapped ->
+--- a/app/src/main/java/ir/rahyar/app/ui/settings/SettingsScreen.kt
++++ b/app/src/main/java/ir/rahyar/app/ui/settings/SettingsScreen.kt
+@@ -17,6 +17,7 @@
+ import androidx.compose.ui.unit.dp
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import ir.rahyar.app.BuildConfig
++import ir.rahyar.app.core.provider.ProviderManager
+ import ir.rahyar.app.domain.models.TransportMode
+ import ir.rahyar.app.domain.repository.SettingsRepository
+ import ir.rahyar.app.navigation.NavigationSession
+@@ -26,13 +27,11 @@
+ fun SettingsScreen(
+     settingsRepository: SettingsRepository,
+     navigationSession: NavigationSession,
++    providerManager: ProviderManager,
+     onBack: () -> Unit
+ ) {
+     val scope = rememberCoroutineScope()
+-    val speedUnit by settingsRepository.speedUnitFlow.collectAsStateWithLifecycle(initialValue = "km/h")
+     val themeMode by settingsRepository.themeModeFlow.collectAsStateWithLifecycle(initialValue = "system")
+-    val language by settingsRepository.languageFlow.collectAsStateWithLifecycle(initialValue = "fa")
+-    val dialect by settingsRepository.dialectFlow.collectAsStateWithLifecycle(initialValue = "tehran")
+     val voiceEnabled by settingsRepository.voiceGuidanceFlow.collectAsStateWithLifecycle(initialValue = true)
+     val transportMode by settingsRepository.transportModeFlow.collectAsStateWithLifecycle(initialValue = TransportMode.CAR)
+ 
+@@ -50,19 +49,6 @@
+             TextButton(onClick = onBack) { Text("بازگشت") }
+         }
+ 
+-        Section("زبان") {
+-            ChoiceRow(listOf("fa", "en", "ar", "tr", "ku", "az"), language) {
+-                scope.launch { settingsRepository.setLanguage(it) }
+-            }
+-        }
+-
+-        Section("گویش فارسی") {
+-            ChoiceRow(listOf("tehran", "standard", "isfahan", "shiraz"), dialect) {
+-                scope.launch { settingsRepository.setDialect(it) }
+-            }
+-            Text("گویش، ترجیح صوتی است و به صدای نصب‌شده روی دستگاه وابسته است.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+-        }
+-
+         Section("راهنمای صوتی") {
+             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                 Text("اعلان‌های صوتی مسیر", modifier = Modifier.weight(1f))
+@@ -74,7 +60,7 @@
+         }
+ 
+         Section("حالت حمل‌ونقل") {
+-            ModeChoiceRow(transportMode) { mode ->
++            ModeChoiceRow(transportMode, providerManager) { mode ->
+                 navigationSession.setTransportMode(mode)
+                 scope.launch { settingsRepository.setTransportMode(mode) }
+             }
+@@ -86,20 +72,6 @@
+             }
+         }
+ 
+-        Section("واحد سرعت") {
+-            ChoiceRow(listOf("km/h", "mph"), speedUnit) {
+-                scope.launch { settingsRepository.setSpeedUnit(it) }
+-            }
+-        }
+-
+-        Section("نقشه‌های آفلاین") {
+-            Text("زیرساخت دانلود منطقه‌ای آماده است؛ در Field Test فقط منابع مجاز/تأییدشده استفاده می‌شوند.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+-        }
+-
+-        Section("Android Auto") {
+-            Text("این بخش هنوز در Field Test موبایل فعال نشده است.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+-        }
+-
+         Section("دربارهٔ راه‌یار") {
+             Text("راه‌یار — همراه هوشمند شما در سفر")
+             Text("نسخه ${BuildConfig.VERSION_NAME}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+@@ -137,9 +109,13 @@
+ }
+ 
+ @Composable
+-private fun ModeChoiceRow(selected: TransportMode, onSelected: (TransportMode) -> Unit) {
++private fun ModeChoiceRow(
++    selected: TransportMode,
++    providerManager: ProviderManager,
++    onSelected: (TransportMode) -> Unit
++) {
+     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-        TransportMode.entries.forEach { mode ->
++        TransportMode.entries.filter(providerManager::isRoutingSupported).forEach { mode ->
+             FilterChip(
+                 selected = selected == mode,
+                 onClick = { onSelected(mode) },
+@@ -153,16 +129,6 @@
+     "system" -> "سیستم"
+     "light" -> "روشن"
+     "dark" -> "تیره"
+-    "fa" -> "فارسی"
+-    "en" -> "انگلیسی"
+-    "ar" -> "عربی"
+-    "tr" -> "ترکی استانبولی"
+-    "ku" -> "کردی"
+-    "az" -> "ترکی آذری"
+-    "tehran" -> "تهران"
+-    "standard" -> "معیار"
+-    "isfahan" -> "اصفهان"
+-    "shiraz" -> "شیراز"
+     else -> value
+ }
+ 
+--- a/app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt
++++ b/app/src/test/java/ir/rahyar/app/navigation/NavigationSessionWaypointTest.kt
+@@ -32,6 +32,26 @@
+         assertEquals(StopStatus.PENDING, state.itinerary?.stops?.single()?.status)
+     }
+ 
++    @Test fun duplicateStopSelectionIsIdempotent() {
++        val session = NavigationSession()
++        val stop = LatLng(35.825, 50.98)
++        session.setOrigin(LatLng(35.83, 50.95))
++        session.setDestination(LatLng(35.82, 51.00))
++        session.addStop(stop, "first")
++        session.addStop(stop, "second")
++        assertEquals(1, session.state.value.waypoints.size)
++    }
++
++    @Test fun itineraryNeverAcceptsMoreThanEightPendingStops() {
++        val session = NavigationSession()
++        session.setOrigin(LatLng(35.83, 50.95))
++        session.setDestination(LatLng(35.82, 51.00))
++        repeat(10) { index ->
++            session.addStop(LatLng(35.825, 50.98 + index * 0.001), "stop-$index")
++        }
++        assertEquals(8, session.state.value.waypoints.size)
++    }
++
+     @Test fun stopStatusCannotRegressFromArrived() {
+         val session = NavigationSession()
+         session.setOrigin(LatLng(35.83, 50.95))
