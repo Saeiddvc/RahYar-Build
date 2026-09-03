@@ -15,7 +15,7 @@ permissions: { contents: read }
 
 jobs:
   compile-check:
-    name: Run57 Compile + Unit Tests
+    name: Run58 Compile + Unit Tests
     runs-on: ubuntu-latest
     env:
       NESHAN_API_KEY: ${{ secrets.NESHAN_API_KEY }}
@@ -334,6 +334,15 @@ jobs:
           grep -q 'versionCode = 35' app/build.gradle.kts
           grep -q 'versionName = "1.7.3-run57-final-font-structure"' app/build.gradle.kts
 
+          patch -p1 < ../ci/run58.field-ux.patch
+          grep -q 'versionCode = 36' app/build.gradle.kts
+          grep -q 'versionName = "1.7.4-run58-field-fixes"' app/build.gradle.kts
+
+      - name: Run58 field UX contract
+        working-directory: project
+        shell: bash
+        run: python3 ../ci/run58.field-ux-contract.py
+
       - name: Final field-regression source checks
         working-directory: project
         shell: bash
@@ -585,6 +594,16 @@ jobs:
           jq -e '.routes | length > 0' /tmp/osrm.json >/dev/null
           echo "OSRM public fallback returned a real route."
 
+      - name: Live map style smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 2 --max-time 35 \
+            'https://tiles.openfreemap.org/styles/liberty' > /tmp/rahyar-map-style.json
+          jq -e '.version == 8 and (.sources | type == "object") and (.sources | length > 0)' \
+            /tmp/rahyar-map-style.json >/dev/null
+          echo "OpenFreeMap style and tile source contract are reachable."
+
       - name: HeiGIT ORS endpoint smoke
         shell: bash
         run: |
@@ -697,10 +716,10 @@ jobs:
         shell: bash
         run: python3 ci/verify_run57_apk.py project/app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Upload Run57 APK candidate
+      - name: Upload Run58 APK field test
         uses: actions/upload-artifact@v4
         with:
-          name: RahYar-1.7.3-Run57-APK-Candidate
+          name: RahYar-1.7.4-Run58-Field-Test
           path: project/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
