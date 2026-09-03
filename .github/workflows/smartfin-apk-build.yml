@@ -1,0 +1,40 @@
+name: SmartFin Android APK Build
+on:
+  push:
+    branches: [smartfin-apk-build]
+    paths:
+      - 'smartfin-build/**'
+      - '.github/workflows/smartfin-apk-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore SmartFin Android source
+        run: |
+          mkdir -p smartfin-build
+          base64 -d smartfin-build/android-src.tar.gz.b64 > /tmp/android-src.tar.gz
+          tar -xzf /tmp/android-src.tar.gz -C smartfin-build
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Compile debug APK
+        working-directory: smartfin-build/android
+        run: gradle assembleDebug --stacktrace --warning-mode all
+      - name: Verify APK
+        run: |
+          test -s smartfin-build/android/app/build/outputs/apk/debug/app-debug.apk
+          sha256sum smartfin-build/android/app/build/outputs/apk/debug/app-debug.apk | tee smartfin-build/app-debug.apk.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SmartFin-AI-Assistant-debug-apk
+          path: |
+            smartfin-build/android/app/build/outputs/apk/debug/app-debug.apk
+            smartfin-build/app-debug.apk.sha256
+          if-no-files-found: error
