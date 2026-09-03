@@ -395,7 +395,7 @@ jobs:
 
           # Required UX.
           grep -q 'LocalLayoutDirection provides layoutDirection' app/src/main/java/ir/rahyar/app/ui/theme/Theme.kt
-          grep -q '"fa", "ar", "ku" -> LayoutDirection.Rtl' app/src/main/java/ir/rahyar/app/MainActivity.kt
+          grep -q 'layoutDirection = LayoutDirection.Rtl' app/src/main/java/ir/rahyar/app/MainActivity.kt
           grep -q 'horizontalScroll(rememberScrollState())' app/src/main/java/ir/rahyar/app/ui/components/PreNavigationComponents.kt
           grep -q 'label = { Text(mode.labelFa(), maxLines = 1) }' app/src/main/java/ir/rahyar/app/ui/components/PreNavigationComponents.kt
           grep -q 'addOnMapLongClickListener' app/src/main/java/ir/rahyar/app/ui/screens/RahyarMapScreen.kt
