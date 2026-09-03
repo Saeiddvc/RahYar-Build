@@ -15,8 +15,7 @@ jobs:
       - name: Restore SmartFin Android source
         run: |
           mkdir -p smartfin-build
-          base64 -d smartfin-build/android-src.tar.gz.b64 > /tmp/android-src.tar.gz
-          tar -xzf /tmp/android-src.tar.gz -C smartfin-build
+          tar -xzf smartfin-build/android-src.tar.gz -C smartfin-build
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
