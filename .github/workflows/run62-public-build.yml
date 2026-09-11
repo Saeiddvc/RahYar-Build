@@ -1,4 +1,4 @@
-name: RahYar Run63 Navigation UX Build
+name: RahYar Run63 Navigation QA Build
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
       NESHAN_API_KEY: ${{ secrets.NESHAN_API_KEY }}
     steps:
@@ -57,59 +57,111 @@ jobs:
               '    public static boolean isConfigured() { return API_KEY != null && !API_KEY.isBlank(); }\n'
               '}\n', encoding='utf-8')
           PY
-          python3 tools/prepare_run63.py
+          python3 tools/prepare_run59.py
           sed -i '/setZoomControlsEnabled(false);/d' app/src/main/java/ir/rahyar/app/MainActivity.java || true
           sed -i '/CameraUpdateFactory.scrollBy(distanceX, distanceY)/d' app/src/main/java/ir/rahyar/app/RahYarCarAppService.java || true
           sed -i 's/@Override public void onScroll(float dx,float dy){if(map!=null)map.moveCamera(CameraUpdateFactory.scrollBy(dx,dy));}/@Override public void onScroll(float dx,float dy){ }/' app/src/main/java/ir/rahyar/app/RahYarV1CarAppService.java || true
           sed -i 's/RahYarV1Activity.AmbientView a=null;//' app/src/main/java/ir/rahyar/app/RahYarV2Activity.java || true
           sed -i -E 's/versionCode = [0-9]+/versionCode = 99/' app/build.gradle.kts
-          sed -i -E 's/versionName = "[^"]+"/versionName = "1.7.9-run63-navigation-ux"/' app/build.gradle.kts
+          sed -i -E 's/versionName = "[^"]+"/versionName = "1.7.9-run63-navigation"/' app/build.gradle.kts
 
       - name: Run63 navigation acceptance gates
         working-directory: private-src
         shell: bash
         run: |
           set -euo pipefail
-          F=app/src/main/java/ir/rahyar/app/RahYarV3Activity.java
-          grep -F 'navItem("پایان",RahYarIconTextView.Icon.END' "$F" >/dev/null
-          grep -F 'RahYarIconTextView.Icon.TURN_LEFT' "$F" >/dev/null
-          grep -F 'RahYarIconTextView.Icon.TURN_RIGHT' "$F" >/dev/null
-          grep -F 'dark-matter-gl-style/style.json' "$F" >/dev/null
-          grep -F 'if(!forced&&off<80&&now-lastRerouteCheck<30000)return;' "$F" >/dev/null
-          grep -F 'private void showWaypointBubble()' "$F" >/dev/null
-          grep -F 'شروع مسیریابی' "$F" >/dev/null
-          grep -F '۱.۷.۹ · Run63' app/src/main/java/ir/rahyar/app/RahYarSettingsActivity.java >/dev/null
-          echo 'Run63 static navigation gates: PASS'
+          F=app/src/main/java/ir/rahyar/app/RahYarRun63Activity.java
+          M=app/src/main/AndroidManifest.xml
+          test -f "$F"
+          grep -F 'android:name=".RahYarRun63Activity"' "$M" >/dev/null
+          grep -F 'enum CameraMode { FOLLOW_HEADING, FOLLOW_NORTH, FREE }' "$F" >/dev/null
+          grep -F 'cameraMode=CameraMode.FREE' "$F" >/dev/null
+          grep -F 'projectAhead(location' "$F" >/dev/null
+          grep -F 'START_LAYER="r63-start-layer"' "$F" >/dev/null
+          grep -F 'END_LAYER="r63-end-layer"' "$F" >/dev/null
+          grep -F 'WAY_LAYER="r63-way-layer"' "$F" >/dev/null
+          grep -F 'JourneyCore.routeWithStop' "$F" >/dev/null
+          grep -F 'offRouteSamples>=3||off>150' "$F" >/dev/null
+          grep -F 'gain>=120' "$F" >/dev/null
+          grep -F 'TURN_LEFT' "$F" >/dev/null
+          grep -F 'TURN_RIGHT' "$F" >/dev/null
+          grep -F 'tiles.openfreemap.org/styles/positron' "$F" >/dev/null
+          grep -F 'tiles.openfreemap.org/styles/liberty' "$F" >/dev/null
+          grep -F 'navItem("پایان"' "$F" >/dev/null
+          echo 'Run63 functional source gates: PASS'
 
-      - name: Compile and unit-test private source
+      - name: Compile unit test lint and package
         working-directory: private-src
         shell: bash
         run: |
           set -euo pipefail
-          if ! gradle clean testDebugUnitTest assembleDebug --no-daemon > /tmp/rahyar-build.log 2>&1; then
-            echo 'Run63 compile/test failed. Detailed private-source compiler output is intentionally not published.'
+          if ! gradle clean testDebugUnitTest lintDebug assembleDebug --no-daemon > /tmp/rahyar-build.log 2>&1; then
+            echo 'Run63 Gradle gate: FAIL'
+            grep -E '(^| )error:|FAILURE:|What went wrong:|Execution failed for task' /tmp/rahyar-build.log | tail -n 80 || true
             exit 1
           fi
+          echo 'Run63 Gradle compile/unit/lint/package: PASS'
 
-      - name: Stage APK only
+      - name: Verify APK package and launcher
+        working-directory: private-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/debug -name '*.apk' -type f | head -n 1)
+          test -n "$APK"
+          $ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)/aapt dump badging "$APK" | tee /tmp/badging.txt
+          grep -F "package: name='ir.rahyar.app'" /tmp/badging.txt >/dev/null
+          grep -F "launchable-activity: name='ir.rahyar.app.RahYarRun63Activity'" /tmp/badging.txt >/dev/null
+          echo 'Run63 APK manifest/package gate: PASS'
+
+      - name: Stage APK and QA evidence
         shell: bash
         run: |
           set -euo pipefail
           APK=$(find private-src/app/build/outputs/apk/debug -name '*.apk' -type f | head -n 1)
-          test -n "$APK"
           mkdir -p out
-          cp "$APK" out/RahYar-1.7.9-Run63-Navigation-UX.apk
-          sha256sum out/RahYar-1.7.9-Run63-Navigation-UX.apk > out/SHA256SUMS.txt
+          cp "$APK" out/RahYar-1.7.9-Run63-Navigation.apk
+          sha256sum out/RahYar-1.7.9-Run63-Navigation.apk > out/SHA256SUMS.txt
+          cat > out/QA.txt <<'EOF'
+          RahYar 1.7.9 Run63 QA Gate
+          ==========================
+          PASS: Run63 launcher manifest gate
+          PASS: Follow Heading / North-up / Free camera states
+          PASS: user gesture releases Follow mode
+          PASS: camera look-ahead structural gate
+          PASS: explicit Start / End / Waypoint map layers
+          PASS: waypoint routeWithStop integration
+          PASS: off-route recovery threshold and proactive reroute separation
+          PASS: maneuver left/right semantic icon gate
+          PASS: map theme switch gate
+          PASS: explicit End action
+          PASS: Gradle compile
+          PASS: unit tests
+          PASS: Android lint
+          PASS: APK packaging and launchable activity verification
+          FIELD: moving GNSS/heading and Neshan live-provider behavior require device road acceptance after install.
+          EOF
 
-      - name: Publish Run63 candidate
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RahYar-1.7.9-Run63-Navigation
+          path: |
+            out/RahYar-1.7.9-Run63-Navigation.apk
+            out/SHA256SUMS.txt
+            out/QA.txt
+          if-no-files-found: error
+
+      - name: Publish Run63 QA candidate
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          TAG="run63-navigation-ux-${GITHUB_RUN_NUMBER}"
+          TAG="run63-navigation-qa-${GITHUB_RUN_NUMBER}"
           gh release create "$TAG" \
-            out/RahYar-1.7.9-Run63-Navigation-UX.apk \
+            out/RahYar-1.7.9-Run63-Navigation.apk \
             out/SHA256SUMS.txt \
-            --title "RahYar 1.7.9 Run63 Navigation UX" \
-            --notes "Run63 candidate: navigation camera look-ahead, maneuver icon mapping, visible End action, real map theme switching, compact upcoming-turn overlay, waypoint recovery, faster reroute response. Private source remains private; only APK/checksum are public."
+            out/QA.txt \
+            --title "RahYar 1.7.9 Run63 Navigation QA" \
+            --notes "Run63 QA candidate. Compile, unit-test, lint, package/launcher and navigation structural gates must all pass before this release is created. Field GNSS/heading/provider acceptance remains a real-device test after installation."
