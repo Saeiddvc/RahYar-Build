@@ -58,6 +58,7 @@ jobs:
               '}\n', encoding='utf-8')
           PY
           python3 tools/prepare_run59.py
+          python3 tools/finalize_run63.py
           sed -i '/setZoomControlsEnabled(false);/d' app/src/main/java/ir/rahyar/app/MainActivity.java || true
           sed -i '/CameraUpdateFactory.scrollBy(distanceX, distanceY)/d' app/src/main/java/ir/rahyar/app/RahYarCarAppService.java || true
           sed -i 's/@Override public void onScroll(float dx,float dy){if(map!=null)map.moveCamera(CameraUpdateFactory.scrollBy(dx,dy));}/@Override public void onScroll(float dx,float dy){ }/' app/src/main/java/ir/rahyar/app/RahYarV1CarAppService.java || true
@@ -81,6 +82,9 @@ jobs:
           grep -F 'END_LAYER="r63-end-layer"' "$F" >/dev/null
           grep -F 'WAY_LAYER="r63-way-layer"' "$F" >/dev/null
           grep -F 'JourneyCore.routeWithStop' "$F" >/dev/null
+          grep -F 'JourneyCore.PlaceCandidate waypoint=activeWaypoint' "$F" >/dev/null
+          grep -F 'if(waypoint!=null)' "$F" >/dev/null
+          grep -F 'activeWaypoint=null' "$F" >/dev/null
           grep -F 'offRouteSamples>=3||off>150' "$F" >/dev/null
           grep -F 'gain>=120' "$F" >/dev/null
           grep -F 'TURN_LEFT' "$F" >/dev/null
@@ -131,6 +135,8 @@ jobs:
           PASS: camera look-ahead structural gate
           PASS: explicit Start / End / Waypoint map layers
           PASS: waypoint routeWithStop integration
+          PASS: waypoint preserved during off-route recovery/reroute
+          PASS: waypoint cleared only after arrival radius
           PASS: off-route recovery threshold and proactive reroute separation
           PASS: maneuver left/right semantic icon gate
           PASS: map theme switch gate
@@ -164,4 +170,4 @@ jobs:
             out/SHA256SUMS.txt \
             out/QA.txt \
             --title "RahYar 1.7.9 Run63 Navigation QA" \
-            --notes "Run63 QA candidate. Compile, unit-test, lint, package/launcher and navigation structural gates must all pass before this release is created. Field GNSS/heading/provider acceptance remains a real-device test after installation."
+            --notes "Run63 QA candidate. Compile, unit-test, lint, package/launcher and navigation structural gates must all pass before this release is created. Waypoint preservation is gated. Field GNSS/heading/provider acceptance remains a real-device test after installation."
