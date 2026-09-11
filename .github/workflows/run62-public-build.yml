@@ -1,4 +1,4 @@
-name: RahYar Run62 Public Build
+name: RahYar Run63 Navigation UX Build
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       NESHAN_API_KEY: ${{ secrets.NESHAN_API_KEY }}
     steps:
@@ -40,7 +40,7 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Prepare private source
+      - name: Prepare Run63 private source
         working-directory: private-src
         shell: bash
         run: |
@@ -57,22 +57,37 @@ jobs:
               '    public static boolean isConfigured() { return API_KEY != null && !API_KEY.isBlank(); }\n'
               '}\n', encoding='utf-8')
           PY
-          python3 tools/prepare_run59.py
+          python3 tools/prepare_run63.py
           sed -i '/setZoomControlsEnabled(false);/d' app/src/main/java/ir/rahyar/app/MainActivity.java || true
           sed -i '/CameraUpdateFactory.scrollBy(distanceX, distanceY)/d' app/src/main/java/ir/rahyar/app/RahYarCarAppService.java || true
           sed -i 's/@Override public void onScroll(float dx,float dy){if(map!=null)map.moveCamera(CameraUpdateFactory.scrollBy(dx,dy));}/@Override public void onScroll(float dx,float dy){ }/' app/src/main/java/ir/rahyar/app/RahYarV1CarAppService.java || true
           sed -i 's/RahYarV1Activity.AmbientView a=null;//' app/src/main/java/ir/rahyar/app/RahYarV2Activity.java || true
-          sed -i -E 's/versionCode = [0-9]+/versionCode = 98/' app/build.gradle.kts
-          sed -i -E 's/versionName = "[^"]+"/versionName = "1.7.8-run62-navigation-recovery"/' app/build.gradle.kts
-          sed -i 's/۱.۷.۵ · Run59/۱.۷.۸ · Run62/' app/src/main/java/ir/rahyar/app/RahYarSettingsActivity.java || true
+          sed -i -E 's/versionCode = [0-9]+/versionCode = 99/' app/build.gradle.kts
+          sed -i -E 's/versionName = "[^"]+"/versionName = "1.7.9-run63-navigation-ux"/' app/build.gradle.kts
 
-      - name: Build private source without exposing source logs
+      - name: Run63 navigation acceptance gates
         working-directory: private-src
         shell: bash
         run: |
           set -euo pipefail
-          if ! gradle clean assembleDebug --no-daemon > /tmp/rahyar-build.log 2>&1; then
-            echo 'Private RahYar build failed. Detailed compiler output is intentionally not published from this public workflow.'
+          F=app/src/main/java/ir/rahyar/app/RahYarV3Activity.java
+          grep -F 'navItem("پایان",RahYarIconTextView.Icon.END' "$F" >/dev/null
+          grep -F 'RahYarIconTextView.Icon.TURN_LEFT' "$F" >/dev/null
+          grep -F 'RahYarIconTextView.Icon.TURN_RIGHT' "$F" >/dev/null
+          grep -F 'dark-matter-gl-style/style.json' "$F" >/dev/null
+          grep -F 'if(!forced&&off<80&&now-lastRerouteCheck<30000)return;' "$F" >/dev/null
+          grep -F 'private void showWaypointBubble()' "$F" >/dev/null
+          grep -F 'شروع مسیریابی' "$F" >/dev/null
+          grep -F '۱.۷.۹ · Run63' app/src/main/java/ir/rahyar/app/RahYarSettingsActivity.java >/dev/null
+          echo 'Run63 static navigation gates: PASS'
+
+      - name: Compile and unit-test private source
+        working-directory: private-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gradle clean testDebugUnitTest assembleDebug --no-daemon > /tmp/rahyar-build.log 2>&1; then
+            echo 'Run63 compile/test failed. Detailed private-source compiler output is intentionally not published.'
             exit 1
           fi
 
@@ -83,18 +98,18 @@ jobs:
           APK=$(find private-src/app/build/outputs/apk/debug -name '*.apk' -type f | head -n 1)
           test -n "$APK"
           mkdir -p out
-          cp "$APK" out/RahYar-1.7.8-Run62-Navigation-Recovery.apk
-          sha256sum out/RahYar-1.7.8-Run62-Navigation-Recovery.apk > out/SHA256SUMS.txt
+          cp "$APK" out/RahYar-1.7.9-Run63-Navigation-UX.apk
+          sha256sum out/RahYar-1.7.9-Run63-Navigation-UX.apk > out/SHA256SUMS.txt
 
-      - name: Publish APK to public build repository
+      - name: Publish Run63 candidate
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          TAG="run62-public-${GITHUB_RUN_NUMBER}"
+          TAG="run63-navigation-ux-${GITHUB_RUN_NUMBER}"
           gh release create "$TAG" \
-            out/RahYar-1.7.8-Run62-Navigation-Recovery.apk \
+            out/RahYar-1.7.9-Run63-Navigation-UX.apk \
             out/SHA256SUMS.txt \
-            --title "RahYar 1.7.8 Run62 Navigation Recovery" \
-            --notes "Public binary build from private RahYar source. Source remains private; only APK and checksum are published."
+            --title "RahYar 1.7.9 Run63 Navigation UX" \
+            --notes "Run63 candidate: navigation camera look-ahead, maneuver icon mapping, visible End action, real map theme switching, compact upcoming-turn overlay, waypoint recovery, faster reroute response. Private source remains private; only APK/checksum are public."
