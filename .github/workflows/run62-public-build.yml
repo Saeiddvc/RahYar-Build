@@ -101,7 +101,12 @@ jobs:
           set -euo pipefail
           if ! gradle clean testDebugUnitTest lintDebug assembleDebug --no-daemon > /tmp/rahyar-build.log 2>&1; then
             echo 'Run63 Gradle gate: FAIL'
-            grep -E '(^| )error:|FAILURE:|What went wrong:|Execution failed for task' /tmp/rahyar-build.log | tail -n 80 || true
+            if [ -f app/build/reports/lint-results-debug.txt ]; then
+              echo '--- Android Lint errors ---'
+              grep -n -B 2 -A 4 'Error:' app/build/reports/lint-results-debug.txt || cat app/build/reports/lint-results-debug.txt
+            fi
+            echo '--- Gradle failure summary ---'
+            grep -E '(^| )error:|FAILURE:|What went wrong:|Execution failed for task' /tmp/rahyar-build.log | tail -n 120 || true
             exit 1
           fi
           echo 'Run63 Gradle compile/unit/lint/package: PASS'
