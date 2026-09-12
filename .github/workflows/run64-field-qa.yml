@@ -49,6 +49,7 @@ jobs:
           python3 tools/prepare_run59.py
           python3 tools/finalize_run63.py
           python3 tools/run64_field_fixes.py
+          python3 tools/run64_marker_fix.py
           python3 tools/run63_lint_release_fixes.py
           sed -i '/setZoomControlsEnabled(false);/d' app/src/main/java/ir/rahyar/app/MainActivity.java || true
           sed -i '/CameraUpdateFactory.scrollBy(distanceX, distanceY)/d' app/src/main/java/ir/rahyar/app/RahYarCarAppService.java || true
@@ -69,6 +70,7 @@ jobs:
           grep -F 'مرور کامل مسیر' "$F" >/dev/null
           grep -F 'r63-active-to-waypoint' "$F" >/dev/null
           grep -F 'Color.rgb(244,164,44)' "$F" >/dev/null
+          grep -F 'RahYarRouteMarkerFactory.create' "$F" >/dev/null
           grep -F 'if(panel!=null){removePanel();return true;}' "$F" >/dev/null
           grep -F 'if(transientView!=null){dismissTransient();return true;}' "$F" >/dev/null
           grep -F 'if("road".equals(mode))RahYarMapStyler.applyPersianLight(style)' "$F" >/dev/null
@@ -117,6 +119,7 @@ jobs:
           PASS - full route overview action
           PASS - waypoint shown in route overview
           PASS - added waypoint leg uses a distinct route color
+          PASS - origin/destination/waypoint use semantic pin markers
           PASS - map tap dismisses panels and transient bubbles
           PASS - road/clean theme modes are visually separated in source behavior
           PASS - weather retries after provider/network failure
@@ -141,4 +144,4 @@ jobs:
           TAG="run64-field-qa-${GITHUB_RUN_NUMBER}"
           gh release create "$TAG" out/RahYar-1.8.0-Run64-FieldFix.apk out/SHA256SUMS.txt out/QA.txt \
             --title "RahYar 1.8.0 Run64 Field Fix QA" \
-            --notes "Run64 field-defect candidate: location-centered search, full route overview, distinct waypoint leg, map-tap dismissal, visible theme separation and weather retry. Physical road acceptance remains required."
+            --notes "Run64 field-defect candidate: location-centered search, full route overview, semantic route pins, distinct waypoint leg, map-tap dismissal, visible theme separation and weather retry. Physical road acceptance remains required."
