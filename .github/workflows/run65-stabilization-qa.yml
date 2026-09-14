@@ -1,0 +1,119 @@
+name: RahYar Run65 Stabilization QA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths: ['.github/workflows/run65-stabilization-qa.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  final-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      NESHAN_API_KEY: ${{ secrets.NESHAN_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Saeiddvc/SaeidNavigator-Android
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private-src
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+
+      - name: Prepare Run65 stabilization source
+        working-directory: private-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${NESHAN_API_KEY:-}" || { echo 'NESHAN_API_KEY missing'; exit 1; }
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          key=os.environ['NESHAN_API_KEY'].strip().replace('\\','\\\\').replace('"','\\"')
+          Path('app/src/main/java/ir/rahyar/app/NeshanConfig.java').write_text('package ir.rahyar.app;\npublic final class NeshanConfig { public static final String API_KEY="'+key+'"; private NeshanConfig(){} public static boolean isConfigured(){return API_KEY!=null&&!API_KEY.isBlank();}}\n',encoding='utf-8')
+          PY
+          python3 tools/prepare_run59.py
+          python3 tools/finalize_run63.py
+          python3 tools/run64_field_fixes.py
+          python3 tools/run64_marker_fix.py
+          python3 tools/run65_stabilization.py
+          python3 tools/run63_lint_release_fixes.py
+          sed -i '/setZoomControlsEnabled(false);/d' app/src/main/java/ir/rahyar/app/MainActivity.java || true
+          sed -i '/CameraUpdateFactory.scrollBy(distanceX, distanceY)/d' app/src/main/java/ir/rahyar/app/RahYarCarAppService.java || true
+          sed -i 's/@Override public void onScroll(float dx,float dy){if(map!=null)map.moveCamera(CameraUpdateFactory.scrollBy(dx,dy));}/@Override public void onScroll(float dx,float dy){ }/' app/src/main/java/ir/rahyar/app/RahYarV1CarAppService.java || true
+          sed -i 's/RahYarV1Activity.AmbientView a=null;//' app/src/main/java/ir/rahyar/app/RahYarV2Activity.java || true
+          sed -i -E 's/versionCode = [0-9]+/versionCode = 101/' app/build.gradle.kts
+          sed -i -E 's/versionName = "[^"]+"/versionName = "1.8.1-run65-stabilization"/' app/build.gradle.kts
+
+      - name: Run65 blocker source gates
+        working-directory: private-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=app/src/main/java/ir/rahyar/app/RahYarRun63Activity.java
+          S=app/src/main/java/ir/rahyar/app/RahYarSettingsActivity.java
+          grep -F 'FLAG_KEEP_SCREEN_ON' "$F" >/dev/null
+          grep -F 'clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)' "$F" >/dev/null
+          grep -F 'acceptLocation(raw)' "$F" >/dev/null
+          grep -F 'matchToActiveRoute(accepted)' "$F" >/dev/null
+          grep -F 'routeProgressIndex=Math.max(routeProgressIndex,best)' "$F" >/dev/null
+          grep -F 'smoothBearing(rb)' "$F" >/dev/null
+          grep -F 'if(!navigating)startSource=' "$F" >/dev/null
+          grep -F 'BuildConfig.VERSION_NAME' "$S" >/dev/null
+          grep -F 'OpenNavCore.search(q,here)' "$F" >/dev/null
+          echo 'Run65 stabilization source gates: PASS'
+
+      - name: Fresh compile unit lint package
+        working-directory: private-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle clean testDebugUnitTest lintDebug assembleDebug --no-daemon --no-build-cache --rerun-tasks
+
+      - name: Verify and stage APK
+        working-directory: private-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/debug -name '*.apk' -type f | head -n 1)
+          AAPT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt"
+          "$AAPT" dump badging "$APK" | tee /tmp/badging.txt
+          grep -F "package: name='ir.rahyar.app'" /tmp/badging.txt >/dev/null
+          grep -F "launchable-activity: name='ir.rahyar.app.RahYarRun63Activity'" /tmp/badging.txt >/dev/null
+          mkdir -p ../out
+          cp "$APK" ../out/RahYar-1.8.1-Run65-Stabilization.apk
+          sha256sum ../out/RahYar-1.8.1-Run65-Stabilization.apk > ../out/SHA256SUMS.txt
+          cat > ../out/QA.txt <<'EOF'
+          RahYar 1.8.1 Run65 Stabilization QA
+          PASS requires fresh compile, unit, lint, package and source gates.
+          Automated gates cover keep-screen-on lifecycle, raw-fix rejection, route matching, monotonic route progress, smoothed route heading, removal of ambiguous A marker during navigation, live build version, and retained Run64 search fix.
+          FIELD REQUIRED: moving vehicle marker smoothness, road accuracy, heading/follow camera, maneuver advancement and reroute behavior remain physical-device acceptance items.
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RahYar-1.8.1-Run65-Stabilization
+          path: out/*
+          if-no-files-found: error
+
+      - name: Publish QA candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="run65-stabilization-qa-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" out/RahYar-1.8.1-Run65-Stabilization.apk out/SHA256SUMS.txt out/QA.txt --title "RahYar 1.8.1 Run65 Stabilization QA" --notes "Run65 stabilization candidate. Automated QA is not a substitute for moving-device field acceptance."
