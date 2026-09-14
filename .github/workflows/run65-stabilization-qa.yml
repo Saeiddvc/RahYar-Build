@@ -65,15 +65,10 @@ jobs:
           set -euo pipefail
           F=app/src/main/java/ir/rahyar/app/RahYarRun63Activity.java
           S=app/src/main/java/ir/rahyar/app/RahYarSettingsActivity.java
-          grep -F 'FLAG_KEEP_SCREEN_ON' "$F" >/dev/null
-          grep -F 'clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)' "$F" >/dev/null
-          grep -F 'acceptLocation(raw)' "$F" >/dev/null
-          grep -F 'matchToActiveRoute(accepted)' "$F" >/dev/null
-          grep -F 'routeProgressIndex=Math.max(routeProgressIndex,best)' "$F" >/dev/null
-          grep -F 'smoothBearing(rb)' "$F" >/dev/null
-          grep -F 'if(!navigating)startSource=' "$F" >/dev/null
-          grep -F 'BuildConfig.VERSION_NAME' "$S" >/dev/null
-          grep -F 'OpenNavCore.search(q,here)' "$F" >/dev/null
+          for needle in 'FLAG_KEEP_SCREEN_ON' 'clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)' 'acceptLocation(raw)' 'matchToActiveRoute(accepted)' 'routeProgressIndex=Math.max(routeProgressIndex,best)' 'smoothBearing(rb)' 'if(!navigating)startSource=' 'OpenNavCore.search(q,here)'; do
+            grep -F "$needle" "$F" >/dev/null || { echo "MISSING GATE: $needle"; exit 1; }
+          done
+          grep -F 'BuildConfig.VERSION_NAME' "$S" >/dev/null || { echo 'MISSING GATE: live BuildConfig version'; exit 1; }
           echo 'Run65 stabilization source gates: PASS'
 
       - name: Fresh compile unit lint package
