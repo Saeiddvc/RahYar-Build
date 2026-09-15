@@ -70,6 +70,7 @@ jobs:
             grep -F "$needle" "$F" >/dev/null || { echo "MISSING GATE: $needle"; exit 1; }
           done
           grep -F 'BuildConfig.VERSION_NAME' "$S" >/dev/null || { echo 'MISSING GATE: live BuildConfig version'; exit 1; }
+          grep -F 'e.setHint("ثبت نشده")' "$S" >/dev/null || { echo 'MISSING GATE: explicit unset numeric state'; exit 1; }
           grep -F 'buildFeatures { buildConfig = true }' "$G" >/dev/null || { echo 'MISSING GATE: BuildConfig generation'; exit 1; }
           echo 'Run65 stabilization source gates: PASS'
 
@@ -96,7 +97,7 @@ jobs:
           cat > ../out/QA.txt <<'EOF'
           RahYar 1.8.1 Run65 Stabilization QA
           PASS requires fresh compile, unit, lint, package and source gates.
-          Automated gates cover keep-screen-on lifecycle, raw-fix rejection, route matching, monotonic route progress, smoothed route heading, removal of ambiguous A marker during navigation, live build version, generated BuildConfig metadata, and retained Run64 search fix.
+          Automated gates cover keep-screen-on lifecycle, raw-fix rejection, route matching, monotonic route progress, smoothed route heading, removal of ambiguous A marker during navigation, live build version, generated BuildConfig metadata, retained Run64 search fix, and explicit unset state for zero/unconfigured numeric settings such as available fuel.
           FIELD REQUIRED: moving vehicle marker smoothness, road accuracy, heading/follow camera, maneuver advancement and reroute behavior remain physical-device acceptance items.
           EOF
 
