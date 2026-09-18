@@ -41,7 +41,7 @@ jobs:
           key=os.environ['NESHAN_API_KEY'].strip().replace('\\','\\\\').replace('"','\\"')
           Path('app/src/main/java/ir/rahyar/app/NeshanConfig.java').write_text('package ir.rahyar.app;\npublic final class NeshanConfig { public static final String API_KEY="'+key+'"; private NeshanConfig(){} public static boolean isConfigured(){return API_KEY!=null&&!API_KEY.isBlank();}}\n',encoding='utf-8')
           PY
-      - name: Apply diagnostic-only compile unblockers
+      - name: Apply candidate production compile fixes
         shell: bash
         run: |
           set -euo pipefail
@@ -49,8 +49,8 @@ jobs:
           from pathlib import Path
           edits={
             'app/src/main/java/ir/rahyar/app/MainActivity.java': [('            map.getUiSettings().setZoomControlsEnabled(false);\n','')],
-            'app/src/main/java/ir/rahyar/app/RahYarCarAppService.java': [('            if (map != null) map.moveCamera(CameraUpdateFactory.scrollBy(distanceX, distanceY));','            // diagnostic probe: unsupported scrollBy removed; production fix must preserve pan behavior')],
-            'app/src/main/java/ir/rahyar/app/RahYarV1CarAppService.java': [('@Override public void onScroll(float dx,float dy){if(map!=null)map.moveCamera(CameraUpdateFactory.scrollBy(dx,dy));}','@Override public void onScroll(float dx,float dy){/* diagnostic probe only; production fix must preserve pan behavior */}')],
+            'app/src/main/java/ir/rahyar/app/RahYarCarAppService.java': [('            if (map != null) map.moveCamera(CameraUpdateFactory.scrollBy(distanceX, distanceY));','            if (map != null) map.scrollBy(distanceX, distanceY);')],
+            'app/src/main/java/ir/rahyar/app/RahYarV1CarAppService.java': [('@Override public void onScroll(float dx,float dy){if(map!=null)map.moveCamera(CameraUpdateFactory.scrollBy(dx,dy));}','@Override public void onScroll(float dx,float dy){if(map!=null)map.scrollBy(dx,dy);}')],
             'app/src/main/java/ir/rahyar/app/RahYarV2Activity.java': [('private void showAmbientWeather(OpenNavCore.WeatherState w){RahYarV1Activity.AmbientView a=null;showTimedBubble(','private void showAmbientWeather(OpenNavCore.WeatherState w){showTimedBubble(')]
           }
           for fn,repls in edits.items():
@@ -60,7 +60,7 @@ jobs:
               s=s.replace(old,new,1)
             p.write_text(s,encoding='utf-8')
           PY
-      - name: Compile probe only
+      - name: Compile candidate production fixes
         shell: bash
         run: |
           set -euo pipefail
