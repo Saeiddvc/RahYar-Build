@@ -1,0 +1,81 @@
+name: RahYar Run66 Compile Unblock QA
+on:
+  push:
+    branches: [pc/run66-field-hardening]
+    paths: ['.github/workflows/run66-compile-unblock-qa.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    env:
+      NESHAN_API_KEY: ${{ secrets.NESHAN_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Saeiddvc/SaeidNavigator-Android
+          ref: pc/run66-field-hardening
+          path: src
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+      - name: Apply three remaining compile unblockers in QA workspace
+        working-directory: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          replacements = {
+            'app/src/main/java/ir/rahyar/app/MainActivity.java': [
+              ('            map.getUiSettings().setZoomControlsEnabled(false);\n','')],
+            'app/src/main/java/ir/rahyar/app/RahYarV1CarAppService.java': [
+              ('map.moveCamera(CameraUpdateFactory.scrollBy(dx,dy))','map.scrollBy(dx,dy)')],
+            'app/src/main/java/ir/rahyar/app/RahYarV2Activity.java': [
+              ('private void showAmbientWeather(OpenNavCore.WeatherState w){RahYarV1Activity.AmbientView a=null;showTimedBubble(', 'private void showAmbientWeather(OpenNavCore.WeatherState w){showTimedBubble(')]
+          }
+          for fn, reps in replacements.items():
+              p=Path(fn); s=p.read_text(encoding='utf-8')
+              for old,new in reps:
+                  if old not in s: raise SystemExit(f'Expected blocker pattern not found: {fn}: {old}')
+                  s=s.replace(old,new,1)
+              p.write_text(s,encoding='utf-8')
+          PY
+          grep -R "CameraUpdateFactory.scrollBy" app/src/main/java/ir/rahyar/app && exit 1 || true
+          grep -R "RahYarV1Activity.AmbientView" app/src/main/java/ir/rahyar/app && exit 1 || true
+      - name: Inject runtime Neshan key
+        working-directory: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${NESHAN_API_KEY:-}" || { echo 'NESHAN_API_KEY missing'; exit 1; }
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          key=os.environ['NESHAN_API_KEY'].strip().replace('\\','\\\\').replace('"','\\"')
+          Path('app/src/main/java/ir/rahyar/app/NeshanConfig.java').write_text('package ir.rahyar.app;\npublic final class NeshanConfig { public static final String API_KEY="'+key+'"; private NeshanConfig(){} public static boolean isConfigured(){return API_KEY!=null&&!API_KEY.isBlank();}}\n',encoding='utf-8')
+          PY
+      - name: Fresh unit lint assemble
+        working-directory: src
+        run: gradle clean testDebugUnitTest lintDebug assembleDebug --no-daemon --no-build-cache --rerun-tasks
+      - name: Verify APK
+        working-directory: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          sha256sum "$APK" | tee app/build/outputs/apk/debug/app-debug.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RahYar-Run66-Compile-Unblock-QA
+          path: |
+            src/app/build/outputs/apk/debug/app-debug.apk
+            src/app/build/outputs/apk/debug/app-debug.sha256
+          if-no-files-found: error
