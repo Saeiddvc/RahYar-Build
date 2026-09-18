@@ -1,0 +1,81 @@
+name: RahYar Run66 Promote Compile Fixes
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths: ['.github/workflows/run66-promote-compile-fixes.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  promote-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      NESHAN_API_KEY: ${{ secrets.NESHAN_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Saeiddvc/SaeidNavigator-Android
+          ref: pc/run66-field-hardening
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: true
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+      - name: Apply verified production compile fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          edits={
+            'app/src/main/java/ir/rahyar/app/MainActivity.java': [('            map.getUiSettings().setZoomControlsEnabled(false);\n','')],
+            'app/src/main/java/ir/rahyar/app/RahYarCarAppService.java': [('            if (map != null) map.moveCamera(CameraUpdateFactory.scrollBy(distanceX, distanceY));','            if (map != null) map.scrollBy(distanceX, distanceY);')],
+            'app/src/main/java/ir/rahyar/app/RahYarV1CarAppService.java': [('@Override public void onScroll(float dx,float dy){if(map!=null)map.moveCamera(CameraUpdateFactory.scrollBy(dx,dy));}','@Override public void onScroll(float dx,float dy){if(map!=null)map.scrollBy(dx,dy);}')],
+            'app/src/main/java/ir/rahyar/app/RahYarV2Activity.java': [('private void showAmbientWeather(OpenNavCore.WeatherState w){RahYarV1Activity.AmbientView a=null;showTimedBubble(','private void showAmbientWeather(OpenNavCore.WeatherState w){showTimedBubble(')]
+          }
+          changed=[]
+          for fn,repls in edits.items():
+            p=Path(fn); s=p.read_text(encoding='utf-8'); before=s
+            for old,new in repls:
+              if old not in s: raise SystemExit(f'expected blocker not found: {fn}: {old}')
+              s=s.replace(old,new,1)
+            p.write_text(s,encoding='utf-8')
+            if s!=before: changed.append(fn)
+          if len(changed)!=4: raise SystemExit(f'expected 4 changed files, got {changed}')
+          print('\n'.join(changed))
+          PY
+      - name: Commit fixes to Run66 source branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'RahYar CI'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app/src/main/java/ir/rahyar/app/MainActivity.java app/src/main/java/ir/rahyar/app/RahYarCarAppService.java app/src/main/java/ir/rahyar/app/RahYarV1CarAppService.java app/src/main/java/ir/rahyar/app/RahYarV2Activity.java
+          git commit -m 'fix(run66): resolve verified MapLibre compile blockers'
+          git push origin HEAD:pc/run66-field-hardening
+      - name: Inject runtime key for verification only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${NESHAN_API_KEY:-}"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          key=os.environ['NESHAN_API_KEY'].strip().replace('\\','\\\\').replace('"','\\"')
+          Path('app/src/main/java/ir/rahyar/app/NeshanConfig.java').write_text('package ir.rahyar.app;\npublic final class NeshanConfig { public static final String API_KEY="'+key+'"; private NeshanConfig(){} public static boolean isConfigured(){return API_KEY!=null&&!API_KEY.isBlank();}}\n',encoding='utf-8')
+          PY
+      - name: Full Run66 compile unit lint assemble verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle clean testDebugUnitTest lintDebug assembleDebug --no-daemon --no-build-cache --rerun-tasks
