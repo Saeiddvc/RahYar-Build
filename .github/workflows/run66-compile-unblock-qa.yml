@@ -14,7 +14,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: Saeiddvc/SaeidNavigator-Android
           ref: pc/run66-field-hardening
           path: src
       - uses: actions/setup-java@v5
