@@ -1,0 +1,110 @@
+name: RahYar Run66 Field Hardening QA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths: ['.github/workflows/run66-field-hardening-qa.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  final-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      NESHAN_API_KEY: ${{ secrets.NESHAN_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Saeiddvc/SaeidNavigator-Android
+          ref: pc/run66-field-hardening
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private-src
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+
+      - name: Inject private runtime key only
+        working-directory: private-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${NESHAN_API_KEY:-}" || { echo 'NESHAN_API_KEY missing'; exit 1; }
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          key=os.environ['NESHAN_API_KEY'].strip().replace('\\','\\\\').replace('"','\\"')
+          Path('app/src/main/java/ir/rahyar/app/NeshanConfig.java').write_text(
+              'package ir.rahyar.app;\npublic final class NeshanConfig { public static final String API_KEY="'+key+'"; private NeshanConfig(){} public static boolean isConfigured(){return API_KEY!=null&&!API_KEY.isBlank();}}\n',
+              encoding='utf-8')
+          PY
+
+      - name: Run66 source-of-truth gates
+        working-directory: private-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=app/src/main/java/ir/rahyar/app/RahYarRun63Activity.java
+          S=app/src/main/java/ir/rahyar/app/RahYarSettingsActivity.java
+          G=app/build.gradle.kts
+          grep -F 'versionCode = 102' "$G"
+          grep -F 'versionName = "1.8.2-run66-field-hardening"' "$G"
+          for needle in             'FLAG_KEEP_SCREEN_ON'             'clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)'             'acceptLocation(raw)'             'matchToActiveRoute(accepted)'             'routeProgressIndex=Math.max(routeProgressIndex,best)'             'smoothBearing(rb)'             'if(!navigating)startSource='             'OpenNavCore.search(q,here)'; do
+            grep -F "$needle" "$F" >/dev/null || { echo "MISSING RUN66 GATE: $needle"; exit 1; }
+          done
+          grep -F 'BuildConfig.VERSION_NAME' "$S" >/dev/null || { echo 'MISSING RUN66 GATE: live version'; exit 1; }
+          grep -F 'e.setHint("ثبت نشده")' "$S" >/dev/null || { echo 'MISSING RUN66 GATE: unset numeric state'; exit 1; }
+          echo 'Run66 source-of-truth gates: PASS'
+
+      - name: Fresh compile unit lint package
+        working-directory: private-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle clean testDebugUnitTest lintDebug assembleDebug --no-daemon --no-build-cache --rerun-tasks
+
+      - name: Verify and stage APK
+        working-directory: private-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/debug -name '*.apk' -type f | head -n 1)
+          test -n "$APK"
+          AAPT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt"
+          "$AAPT" dump badging "$APK" | tee /tmp/badging.txt
+          grep -F "package: name='ir.rahyar.app' versionCode='102' versionName='1.8.2-run66-field-hardening'" /tmp/badging.txt
+          grep -F "launchable-activity: name='ir.rahyar.app.RahYarRun63Activity'" /tmp/badging.txt
+          mkdir -p ../out
+          cp "$APK" ../out/RahYar-1.8.2-Run66-Field-Hardening.apk
+          sha256sum ../out/RahYar-1.8.2-Run66-Field-Hardening.apk > ../out/SHA256SUMS.txt
+          cat > ../out/QA.txt <<'EOF'
+          RahYar 1.8.2 Run66 Field Hardening QA
+          Source branch: pc/run66-field-hardening.
+          No Run63/64/65 feature patch scripts are injected by CI; branch source is authoritative.
+          PASS requires source gates plus fresh compile, unit, lint, assemble and APK metadata verification.
+          FIELD REQUIRED: moving vehicle marker, road/map matching, heading/follow camera, maneuver advancement, reroute and keep-screen-on on a physical moving device.
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RahYar-1.8.2-Run66-Field-Hardening
+          path: out/*
+          if-no-files-found: error
+
+      - name: Publish QA candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="run66-field-hardening-qa-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" out/RahYar-1.8.2-Run66-Field-Hardening.apk out/SHA256SUMS.txt out/QA.txt --title "RahYar 1.8.2 Run66 Field Hardening QA" --notes "Run66 source-of-truth field-hardening candidate. Physical moving-device acceptance remains mandatory."
